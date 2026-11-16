@@ -48,6 +48,18 @@ setAwardListener((userId, code) => {
   for (const reply of subscribers) if (reply.request.user?.id === userId) send(reply, 'achievement', { code });
 });
 
+/** Asks one user's client to switch to another voice channel (admin drag & drop). */
+export function sendMove(userId: string, channelId: number, by: string) {
+  let delivered = false;
+  for (const reply of subscribers) {
+    if (reply.request.user?.id === userId) {
+      send(reply, 'move', { channelId, by });
+      delivered = true;
+    }
+  }
+  return delivered;
+}
+
 /** Tells one user's open connections that they were removed. */
 export function broadcastKicked(userId: string) {
   for (const reply of subscribers) {

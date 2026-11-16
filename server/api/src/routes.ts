@@ -24,6 +24,7 @@ import {
   closeChannelRoom,
   handleWebhook,
   kickFromAllRooms,
+  sendMove,
   subscribe,
 } from './presence.ts';
 
@@ -192,6 +193,16 @@ export async function registerRoutes(app: FastifyInstance) {
     queries.renameChannel.run(body.name, id);
     broadcastChannels();
     return { channel: getChannel(id) };
+  });
+
+  // Move someone to another voice channel. Their client does the switch itself, so it
+  // works with any LiveKit setup and they keep their mic pipeline and settings.
+  app.post('/api/channels/:id/move', { preHandler: requireAdmin }, async (req) => {
+    const { id } = parse(idParam, req.params);
+    const body = parse(z.object({ userId: z.string() }), req.body);
+    getChannel(id);
+    if (!sendMove(body.userId, id, req.user.nickname)) throw new HttpError(409, 'Пользователь сейчас не в сети');
+    return { ok: true };
   });
 
   app.delete('/api/channels/:id', { preHandler: requireAdmin }, async (req) => {
