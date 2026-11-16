@@ -1,0 +1,26 @@
+{
+  "name": "echo-client",
+  "productName": "Echo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Echo — голосовой чат для своих",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "livekit-client": "^2.24.1",
+    "preact": "^10.27.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^24.0.0",
+    "electron": "^45.3.3",
+    "electron-vite": "^6.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.3.8"
+  }
+}

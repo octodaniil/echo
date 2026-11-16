@@ -1,0 +1,41 @@
+export interface User {
+  id: string;
+  nickname: string;
+  isAdmin: boolean;
+}
+
+export interface ChannelMember {
+  id: string;
+  nickname: string;
+  streaming: boolean;
+  joinedAt: number;
+}
+
+export interface Channel {
+  id: number;
+  name: string;
+  members: ChannelMember[];
+}
+
+export interface Session {
+  serverUrl: string;
+  user: User;
+}
+
+export interface VoiceCredentials {
+  url: string;
+  room: string;
+  token: string;
+}
+
+export interface Invite {
+  code: string;
+  max_uses: number | null;
+  uses: number;
+  expires_at: number | null;
+}
+
+/** Shape of every IPC reply: errors are passed as data so their message survives the bridge. */
+export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+export type SessionEndReason = 'kicked' | 'invalid' | 'logout';
