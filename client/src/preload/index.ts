@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type {
+  AchievementDef,
   Channel,
   Invite,
   IpcResult,
+  Profile,
   ScreenSource,
   Session,
   SessionEndReason,
@@ -26,6 +28,7 @@ const api = {
   join: (args: { serverUrl: string; invite: string; nickname: string }) => call<Session>('auth:join', args),
   logout: () => call<void>('auth:logout'),
 
+  retryConnection: () => call<void>('events:retry'),
   getChannels: () => call<{ channels: Channel[]; online: boolean }>('channels:get'),
   connect: (channelId: number) => call<VoiceCredentials>('channels:connect', channelId),
   createChannel: (name: string) => call<unknown>('channels:create', name),
@@ -36,6 +39,13 @@ const api = {
   updateProfile: (patch: { nickname: string }) => call<Session>('me:update', patch),
   setAvatar: (webp: Uint8Array) => call<Session>('me:set-avatar', webp),
   removeAvatar: () => call<Session>('me:remove-avatar'),
+
+  getAchievementCatalog: () => call<AchievementDef[]>('ach:catalog'),
+  getProfile: (userId: string) => call<Profile>('profile:get', userId),
+  setPinned: (codes: string[]) => call<string[]>('me:pinned', codes),
+  awardAchievement: (userId: string, code: string) => call<unknown>('ach:award', userId, code),
+  revokeAchievement: (userId: string, code: string) => call<unknown>('ach:revoke', userId, code),
+  onAchievement: (cb: (code: string) => void) => on('achievement', cb),
 
   getScreenSources: () => call<ScreenSource[]>('screen:sources'),
   selectScreenSource: (id: string, audio: boolean) => call<void>('screen:select', id, audio),

@@ -102,6 +102,13 @@ export const CloseIcon = (p: Props) => (
   </Icon>
 );
 
+export const EyeIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </Icon>
+);
+
 export const ScreenOffIcon = (p: Props) => (
   <Icon {...p}>
     <path d="M18 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 1-1.7M8 3h12a2 2 0 0 1 2 2v10a2 2 0 0 1-.6 1.4" />

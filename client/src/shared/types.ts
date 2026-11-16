@@ -6,10 +6,32 @@ export interface User {
   avatar: number | null;
 }
 
+export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+export interface AchievementDef {
+  code: string;
+  title: string;
+  description: string;
+  rarity: Rarity;
+  icon: string;
+  manual?: boolean;
+}
+
+export interface Profile extends User {
+  createdAt: number;
+  lastSeenAt: number | null;
+  voiceSeconds: number;
+  streamsCount: number;
+  achievements: { code: string; awardedAt: number }[];
+  pinned: string[];
+}
+
 export interface ChannelMember {
   id: string;
   nickname: string;
   avatar: number | null;
+  /** Achievement codes the user shows off. */
+  pinned?: string[];
   streaming: boolean;
   joinedAt: number;
 }

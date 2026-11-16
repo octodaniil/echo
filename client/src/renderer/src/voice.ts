@@ -29,6 +29,21 @@ export interface VoiceParticipant {
   streaming: boolean;
   /** When they joined this channel (ms since epoch). */
   joinedAt: number;
+  /** Ids of people watching this person's stream. */
+  viewers: string[];
+  /** Their noise suppression mode (shared so friends can tell why someone is noisy). */
+  ns: string | null;
+}
+
+export interface OutboundStats {
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  mbps: number | null;
+  /** Why WebRTC is holding quality back: bandwidth / cpu / none. */
+  limitation: string | null;
+  /** Nobody is watching: LiveKit pauses encoding. */
+  paused: boolean;
 }
 
 export type ConnectionQualityLevel = 'excellent' | 'good' | 'poor' | 'lost' | 'unknown';
@@ -180,6 +195,9 @@ class VoiceClient {
   }
 
   private async onSettings(next: Settings, prev: Settings) {
+    if (this.room && next.noiseSuppression !== prev.noiseSuppression) {
+      void this.room.localParticipant.setAttributes({ ns: next.noiseSuppression }).catch(() => {});
+    }
     try {
       await this.pipeline?.apply(next);
     } catch (err) {
@@ -235,6 +253,7 @@ class VoiceClient {
     const local = room.localParticipant;
     const now = performance.now();
     const all: Participant[] = [local, ...room.remoteParticipants.values()];
+    const watchingOf = (p: Participant) => (p === local ? this.state.watching : p.attributes?.watching) || null;
     const participants = all
       .map((p) => {
         const isLocal = p === local;
@@ -248,6 +267,8 @@ class VoiceClient {
           micMuted: isLocal ? this.state.micMuted : !p.isMicrophoneEnabled,
           streaming: !!p.getTrackPublication(Track.Source.ScreenShare),
           joinedAt: p.joinedAt?.getTime() ?? Date.now(),
+          viewers: all.filter((q) => q !== p && watchingOf(q) === p.identity).map((q) => q.identity),
+          ns: isLocal ? settings.get().noiseSuppression : (p.attributes?.ns ?? null),
         };
       })
       .sort((a, b) => Number(b.isLocal) - Number(a.isLocal) || a.nickname.localeCompare(b.nickname));
@@ -270,7 +291,9 @@ class VoiceClient {
           p.speaking === n.speaking &&
           p.micMuted === n.micMuted &&
           p.nickname === n.nickname &&
-          p.streaming === n.streaming
+          p.streaming === n.streaming &&
+          p.viewers.join() === n.viewers.join() &&
+          p.ns === n.ns
         );
       });
     if (!same) this.set({ participants, watching });
@@ -374,6 +397,12 @@ class VoiceClient {
         if (this.room === room && p === room.localParticipant) this.set({ quality: quality as ConnectionQualityLevel });
       })
       .on(RoomEvent.TrackUnpublished, sync)
+      .on(RoomEvent.ParticipantAttributesChanged, (changed: Record<string, string>, p: Participant) => {
+        if (p !== room.localParticipant && 'watching' in changed && changed.watching === room.localParticipant.identity) {
+          void play('viewerJoin');
+        }
+        sync();
+      })
       .on(RoomEvent.TrackMuted, sync)
       .on(RoomEvent.TrackUnmuted, sync)
       .on(RoomEvent.ParticipantNameChanged, sync)
@@ -422,6 +451,7 @@ class VoiceClient {
       await room.connect(url, token, { autoSubscribe: false });
       if (this.room !== room) return;
       everConnected = true;
+      void room.localParticipant.setAttributes({ ns: s.noiseSuppression }).catch(() => {});
       for (const p of room.remoteParticipants.values()) p.trackPublications.forEach((pub) => this.autoSubscribe(pub));
 
       const micTrack = new LocalAudioTrack(pipeline.track, undefined, true);
@@ -594,6 +624,38 @@ class VoiceClient {
     this.screenPubs = [];
   }
 
+  /** Our own captured screen, for the streamer's preview window. */
+  get localScreenTrack(): MediaStreamTrack | null {
+    return this.screenPubs.find((p) => p.source === Track.Source.ScreenShare)?.track?.mediaStreamTrack ?? null;
+  }
+
+  private lastOutbound: { bytes: number; frames: number; t: number } | null = null;
+
+  /** What actually leaves the encoder right now (for the preview overlay). */
+  async outboundStats(): Promise<OutboundStats | null> {
+    const track = this.screenPubs.find((p) => p.source === Track.Source.ScreenShare)?.track;
+    if (!track) return null;
+    const report = await track.getRTCStatsReport();
+    let o: Record<string, any> | undefined;
+    report?.forEach((s) => {
+      if (s.type === 'outbound-rtp' && s.kind === 'video') o = s;
+    });
+    const paused = track.sender?.getParameters().encodings.every((e) => e.active === false) ?? false;
+    if (!o) return { width: null, height: null, fps: null, mbps: null, limitation: null, paused };
+    const now = { bytes: o.bytesSent as number, frames: o.framesEncoded as number, t: o.timestamp as number };
+    const prev = this.lastOutbound;
+    this.lastOutbound = now;
+    const dt = prev ? (now.t - prev.t) / 1000 : 0;
+    return {
+      width: o.frameWidth ?? null,
+      height: o.frameHeight ?? null,
+      fps: prev && dt > 0 ? Math.round((now.frames - prev.frames) / dt) : (o.framesPerSecond ?? null),
+      mbps: prev && dt > 0 ? Math.round(((now.bytes - prev.bytes) * 8) / dt / 100_000) / 10 : null,
+      limitation: o.qualityLimitationReason ?? null,
+      paused,
+    };
+  }
+
   /** Diagnostics: capture settings and live encoder stats of our own stream. */
   async streamDiagnostics() {
     const video = this.screenPubs.find((p) => p.source === Track.Source.ScreenShare)?.track;
@@ -627,9 +689,18 @@ class VoiceClient {
   }
 
   watch(participantId: string) {
-    if (this.state.watching && this.state.watching !== participantId) this.unwatch();
+    if (this.state.watching === participantId) return;
+    if (this.state.watching) this.unwatch(true);
     for (const pub of this.streamPubs(participantId)) (pub as RemoteTrackPublication).setSubscribed(true);
     this.set({ watching: participantId });
+    void play('watchStart');
+    this.announceWatching(participantId);
+    this.syncParticipants();
+  }
+
+  /** Tell everyone whose stream we watch, so streamers see their viewer count. */
+  private announceWatching(id: string | null) {
+    void this.room?.localParticipant.setAttributes({ watching: id ?? '' }).catch(() => {});
   }
 
   /** Double-click on a streamer in the list: join their channel if needed, then open the stream. */
@@ -669,11 +740,15 @@ class VoiceClient {
     return result;
   }
 
-  unwatch() {
+  unwatch(switching = false) {
     const id = this.state.watching;
     if (!id) return;
     for (const pub of this.streamPubs(id)) (pub as RemoteTrackPublication).setSubscribed(false);
     this.set({ watching: null });
+    if (!switching) {
+      this.announceWatching(null);
+      this.syncParticipants();
+    }
   }
 
   /** Attaches someone's stream video to an element. Returns a detach function. */

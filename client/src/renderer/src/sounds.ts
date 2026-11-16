@@ -13,7 +13,10 @@ export type Cue =
   | 'undeafen'
   | 'streamStart'
   | 'streamStop'
-  | 'disconnected';
+  | 'disconnected'
+  | 'watchStart'
+  | 'viewerJoin'
+  | 'achievement';
 
 /** [frequency Hz, start offset s, duration s] */
 type Note = [number, number, number];
@@ -27,9 +30,27 @@ const CUES: Record<Cue, { notes: Note[]; type: OscillatorType; gain: number }> =
   unmute: { notes: [[293.66, 0, 0.07], [392, 0.05, 0.1]], type: 'triangle', gain: 0.45 },
   deafen: { notes: [[329.63, 0, 0.08], [246.94, 0.06, 0.08], [196, 0.12, 0.14]], type: 'triangle', gain: 0.45 },
   undeafen: { notes: [[196, 0, 0.08], [246.94, 0.06, 0.08], [329.63, 0.12, 0.14]], type: 'triangle', gain: 0.45 },
-  streamStart: { notes: [[523.25, 0, 0.1], [659.25, 0.08, 0.1], [987.77, 0.16, 0.22]], type: 'sine', gain: 0.45 },
-  streamStop: { notes: [[987.77, 0, 0.1], [659.25, 0.08, 0.1], [523.25, 0.16, 0.22]], type: 'sine', gain: 0.45 },
+  // Stream cues are longer and brighter than the voice ones so they stand out.
+  streamStart: {
+    notes: [[392, 0, 0.12], [523.25, 0.09, 0.12], [659.25, 0.18, 0.12], [1046.5, 0.27, 0.35]],
+    type: 'triangle',
+    gain: 0.6,
+  },
+  streamStop: {
+    notes: [[1046.5, 0, 0.12], [659.25, 0.09, 0.12], [523.25, 0.18, 0.12], [392, 0.27, 0.3]],
+    type: 'triangle',
+    gain: 0.6,
+  },
   disconnected: { notes: [[440, 0, 0.14], [349.23, 0.12, 0.14], [261.63, 0.24, 0.3]], type: 'sine', gain: 0.5 },
+  // You opened someone's stream.
+  watchStart: { notes: [[587.33, 0, 0.08], [880, 0.07, 0.08], [1174.66, 0.14, 0.2]], type: 'sine', gain: 0.5 },
+  // Someone started watching your stream.
+  viewerJoin: { notes: [[880, 0, 0.07], [1174.66, 0.06, 0.16]], type: 'sine', gain: 0.4 },
+  achievement: {
+    notes: [[523.25, 0, 0.1], [659.25, 0.08, 0.1], [783.99, 0.16, 0.1], [1046.5, 0.24, 0.12], [1318.5, 0.34, 0.4]],
+    type: 'sine',
+    gain: 0.55,
+  },
 };
 
 let ctx: AudioContext | null = null;

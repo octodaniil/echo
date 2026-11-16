@@ -1,6 +1,16 @@
 import { app, BrowserWindow, clipboard, ipcMain, session as electronSession, shell } from 'electron';
 import { join } from 'node:path';
-import type { Channel, Invite, IpcResult, Session, SessionEndReason, User, VoiceCredentials } from '../shared/types';
+import type {
+  AchievementDef,
+  Channel,
+  Invite,
+  IpcResult,
+  Profile,
+  Session,
+  SessionEndReason,
+  User,
+  VoiceCredentials,
+} from '../shared/types';
 import { authed, request } from './api';
 import { startEvents } from './events';
 import { clearSession, loadSession, normalizeServerUrl, saveSession, type ActiveSession } from './session';
@@ -43,6 +53,9 @@ function beginSession(s: ActiveSession) {
     },
     onUnauthorized(reason) {
       void endSession(reason);
+    },
+    onAchievement(code) {
+      send('achievement', code);
     },
   });
 }
@@ -99,6 +112,11 @@ function registerIpc() {
 
   handle('channels:get', () => ({ channels, online: serverOnline }));
 
+  // "Check now" on the server-down screen: reconnect immediately instead of waiting for backoff.
+  handle('events:retry', () => {
+    if (current) beginSession(current);
+  });
+
   handle('channels:connect', (id: number) =>
     authed<VoiceCredentials>(requireSession(), `/api/channels/${id}/connect`, { method: 'POST', body: {} }),
   );
@@ -139,6 +157,24 @@ function registerIpc() {
     const { user } = await authed<{ user: User }>(requireSession(), '/api/me/avatar', { method: 'DELETE' });
     return updateUser(user);
   });
+
+  // ---------- achievements & profiles ----------
+
+  handle('ach:catalog', async () => (await authed<{ catalog: AchievementDef[] }>(requireSession(), '/api/achievements')).catalog);
+  handle('profile:get', async (id: string) =>
+    (await authed<{ profile: Profile }>(requireSession(), `/api/users/${encodeURIComponent(id)}/profile`)).profile,
+  );
+  handle('me:pinned', async (codes: string[]) =>
+    (await authed<{ pinned: string[] }>(requireSession(), '/api/me/pinned', { method: 'PUT', body: { codes } })).pinned,
+  );
+  handle('ach:award', (userId: string, code: string) =>
+    authed(requireSession(), `/api/users/${encodeURIComponent(userId)}/achievements`, { method: 'POST', body: { code } }),
+  );
+  handle('ach:revoke', (userId: string, code: string) =>
+    authed(requireSession(), `/api/users/${encodeURIComponent(userId)}/achievements/${encodeURIComponent(code)}`, {
+      method: 'DELETE',
+    }),
+  );
 
   // ---------- screen sharing ----------
 

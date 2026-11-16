@@ -6,6 +6,8 @@ export interface EventHandlers {
   /** Token was rejected or the user was removed by an admin. */
   onUnauthorized(reason: 'kicked' | 'invalid'): void;
   onConnectionChange(connected: boolean): void;
+  /** We just earned an achievement. */
+  onAchievement(code: string): void;
 }
 
 /**
@@ -51,6 +53,7 @@ export function startEvents(session: ActiveSession, handlers: EventHandlers): ()
               else if (line.startsWith('data: ')) data += line.slice(6);
             }
             if (event === 'channels') handlers.onChannels(JSON.parse(data) as Channel[]);
+            else if (event === 'achievement') handlers.onAchievement((JSON.parse(data) as { code: string }).code);
             else if (event === 'kicked') {
               handlers.onUnauthorized('kicked');
               return;

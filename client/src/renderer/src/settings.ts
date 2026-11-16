@@ -1,6 +1,6 @@
 // Per-device preferences. Kept in localStorage (Electron persists it to the profile folder).
 
-export type NoiseSuppressionMode = 'off' | 'standard' | 'ai';
+export type NoiseSuppressionMode = 'off' | 'standard' | 'ai' | 'max';
 
 export interface Settings {
   inputDeviceId: string;

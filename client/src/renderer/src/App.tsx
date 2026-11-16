@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import type { Channel, Session, SessionEndReason } from '../../shared/types';
 import { Login } from './Login';
 import { setServerUrl } from './profile';
+import { ServerDown } from './ServerDown';
 import { Main } from './Shell';
 import { voice } from './voice';
 
@@ -16,6 +17,16 @@ export function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [online, setOnline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Show the "server is off" screen only after a few seconds offline (not on brief blips or startup).
+  const [serverDown, setServerDown] = useState(false);
+  useEffect(() => {
+    if (online || !session) {
+      setServerDown(false);
+      return;
+    }
+    const t = window.setTimeout(() => setServerDown(true), 4000);
+    return () => clearTimeout(t);
+  }, [online, session]);
 
   const setSession = (s: Session | null) => {
     if (s) setServerUrl(s.serverUrl);
@@ -53,5 +64,10 @@ export function App() {
       />
     );
   }
-  return <Main session={session} channels={channels} online={online} onSession={setSession} />;
+  return (
+    <>
+      <Main session={session} channels={channels} online={online} onSession={setSession} />
+      {serverDown && <ServerDown serverUrl={session.serverUrl} />}
+    </>
+  );
 }

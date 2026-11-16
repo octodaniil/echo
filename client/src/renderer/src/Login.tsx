@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { Session } from '../../shared/types';
+import { Contact } from './Contact';
 
 const DEFAULT_SERVER = 'echo-voice.duckdns.org:8443';
 
@@ -28,7 +29,7 @@ export function Login({ onDone, notice }: { onDone: (s: Session) => void; notice
       <form class="login-card" onSubmit={submit}>
         <div class="brand">
           <span class="brand-mark" />
-          <h1>Echo</h1>
+          <h1 class="brand-word">ECHO</h1>
         </div>
         <p class="muted">Заходи по инвайту от друзей</p>
 
@@ -53,11 +54,19 @@ export function Login({ onDone, notice }: { onDone: (s: Session) => void; notice
           <input value={nickname} onInput={(e) => setNickname(e.currentTarget.value)} maxLength={32} required />
         </label>
 
-        {error && <div class="error">{error}</div>}
+        {error && (
+          <div class="error">
+            {error}
+            {error === 'Сервер недоступен' && (
+              <div class="tiny">Скорее всего, сервер сейчас выключен — попробуй позже.</div>
+            )}
+          </div>
+        )}
 
         <button class="primary" type="submit" disabled={busy}>
           {busy ? 'Входим…' : 'Войти'}
         </button>
+        <Contact prefix="Нет инвайта или не получается зайти? Пиши в Telegram" />
       </form>
     </div>
   );

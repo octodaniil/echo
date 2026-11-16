@@ -2,7 +2,7 @@ import { loadRnnoise, RnnoiseWorkletNode } from '@sapphi-red/web-noise-suppresso
 import rnnoiseWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url';
 import rnnoiseSimdWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url';
 import rnnoiseWorkletUrl from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url';
-import type { Settings } from './settings';
+import type { NoiseSuppressionMode, Settings } from './settings';
 
 /**
  * Microphone processing chain, all inside one 48 kHz AudioContext:
@@ -99,8 +99,8 @@ export class MicPipeline {
       prev.inputDeviceId !== s.inputDeviceId ||
       prev.echoCancellation !== s.echoCancellation ||
       prev.autoGain !== s.autoGain ||
-      (prev.noiseSuppression === 'standard') !== (s.noiseSuppression === 'standard');
-    const needRewire = needNewStream || (prev.noiseSuppression === 'ai') !== (s.noiseSuppression === 'ai');
+      usesBrowserNs(prev.noiseSuppression) !== usesBrowserNs(s.noiseSuppression);
+    const needRewire = needNewStream || usesRnnoise(prev.noiseSuppression) !== usesRnnoise(s.noiseSuppression);
 
     if (needNewStream) {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -108,7 +108,7 @@ export class MicPipeline {
           deviceId: s.inputDeviceId === 'default' ? undefined : { ideal: s.inputDeviceId },
           echoCancellation: s.echoCancellation,
           // Browser NS only in "standard" mode; in "ai" mode RNNoise does the job.
-          noiseSuppression: s.noiseSuppression === 'standard',
+          noiseSuppression: usesBrowserNs(s.noiseSuppression),
           autoGainControl: s.autoGain,
           channelCount: 1,
           sampleRate: 48_000,
@@ -127,7 +127,7 @@ export class MicPipeline {
     this.rnnoise = null;
 
     this.source = this.ctx.createMediaStreamSource(this.stream!);
-    if (s.noiseSuppression === 'ai') {
+    if (usesRnnoise(s.noiseSuppression)) {
       this.rnnoise = await createRnnoise(this.ctx);
       this.source.connect(this.rnnoise).connect(this.inputGain);
     } else {
@@ -187,6 +187,10 @@ export class MicPipeline {
     await this.ctx.close();
   }
 }
+
+// 'max' stacks both: WebRTC NS handles steady hum/fans, RNNoise handles clicks and bursts.
+const usesBrowserNs = (m: NoiseSuppressionMode) => m === 'standard' || m === 'max';
+const usesRnnoise = (m: NoiseSuppressionMode) => m === 'ai' || m === 'max';
 
 let rnnoiseBinary: Promise<ArrayBuffer> | null = null;
 const workletLoaded = new WeakSet<AudioContext>();
