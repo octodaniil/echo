@@ -4,7 +4,7 @@ import type { Session, UpdateStatus } from '../../shared/types';
 import { Avatar } from './Avatar';
 import { CloseIcon } from './icons';
 import type { MicPipeline } from './mic';
-import { makeAvatar, useSettings } from './profile';
+import { bannerUrl, makeAvatar, makeBanner, useSettings } from './profile';
 import { settings, type NoiseSuppressionMode } from './settings';
 import { play } from './sounds';
 import { THEMES } from './themes';
@@ -325,6 +325,8 @@ function AccountTab({ session, onSession }: { session: Session; onSession: (s: S
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const file = useRef<HTMLInputElement>(null);
+  const bannerFile = useRef<HTMLInputElement>(null);
+  const banner = bannerUrl(session.user.id, session.user.banner);
 
   const run = async (fn: () => Promise<Session>, ok: string) => {
     setBusy(true);
@@ -344,6 +346,16 @@ function AccountTab({ session, onSession }: { session: Session; onSession: (s: S
     e.currentTarget.value = '';
     if (!f) return;
     void run(async () => window.echo.setAvatar(await makeAvatar(f)), 'Аватар обновлён');
+  };
+
+  const onBanner = (e: JSX.TargetedEvent<HTMLInputElement>) => {
+    const f = e.currentTarget.files?.[0];
+    e.currentTarget.value = '';
+    if (!f) return;
+    void run(async () => {
+      const b = await makeBanner(f);
+      return window.echo.setBanner(b.data, b.type);
+    }, 'Баннер обновлён');
   };
 
   return (
@@ -367,6 +379,27 @@ function AccountTab({ session, onSession }: { session: Session; onSession: (s: S
             </button>
           )}
           <small class="muted">Картинка обрежется до квадрата</small>
+        </div>
+      </div>
+
+      <div class="banner-edit">
+        <div class="banner-preview" style={banner ? { backgroundImage: `url("${banner}")` } : undefined}>
+          {!banner && <span class="muted">Баннера нет — будет фон по рангу</span>}
+        </div>
+        <div class="profile-actions">
+          <input ref={bannerFile} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={onBanner} />
+          <button class="primary small" disabled={busy} onClick={() => bannerFile.current?.click()}>
+            Загрузить баннер
+          </button>
+          {banner && (
+            <button class="secondary" disabled={busy} onClick={() => void run(() => window.echo.removeBanner(), 'Баннер удалён')}>
+              Удалить
+            </button>
+          )}
+          <small class="muted">
+            Картинка обрежется до полосы 3:1. GIF и анимированный WebP загружаются как есть (до 4 МБ) — анимация будет
+            играть в профиле и в карточке при наведении.
+          </small>
         </div>
       </div>
 
@@ -523,6 +556,49 @@ function UpdatePanel({ version }: { version: string }) {
 
 // ---------------------------------------------------------------- games
 
+/** Collapsible, searchable list of every game Echo recognizes out of the box. */
+function KnownGamesList() {
+  const [open, setOpen] = useState(false);
+  const [games, setGames] = useState<{ name: string; exes: string[] }[]>([]);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    if (open && games.length === 0) void window.echo.listKnownGames().then(setGames);
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const shown = q ? games.filter((g) => g.name.toLowerCase().includes(q) || g.exes.some((e) => e.includes(q))) : games;
+
+  return (
+    <div class="known-games">
+      <button class="link-btn" onClick={() => setOpen(!open)}>
+        {open ? 'Скрыть список поддерживаемых игр' : 'Какие игры Echo узнаёт сам?'}
+      </button>
+      {open && (
+        <>
+          <input
+            value={query}
+            placeholder={`Поиск среди ${games.length} игр или по имени .exe`}
+            onInput={(e) => setQuery(e.currentTarget.value)}
+            autoFocus
+          />
+          <div class="known-games-list">
+            {shown.map((g) => (
+              <div key={g.name} class="known-game">
+                <span>{g.name}</span>
+                <span class="muted mono tiny">{g.exes.join(', ')}</span>
+              </div>
+            ))}
+            {shown.length === 0 && (
+              <small class="muted">Нет такой — добавь её кнопкой «Добавить игру из запущенных», пока она открыта.</small>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function GamesTab() {
   const s = useSettings();
   const [current, setCurrent] = useState<string | null>(null);
@@ -616,6 +692,8 @@ function GamesTab() {
           {loadingApps ? 'Ищем окна…' : 'Добавить игру из запущенных'}
         </button>
       )}
+
+      <KnownGamesList />
 
       {apps && !naming && (
         <div class="app-picker">

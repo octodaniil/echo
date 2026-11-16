@@ -37,7 +37,8 @@ const KNOWN: Record<string, string> = {
   'helldivers2.exe': 'Helldivers 2',
   'marvel-win64-shipping.exe': 'Marvel Rivals',
   'discovery.exe': 'The Finals',
-  'project8.exe': 'Deadlock',
+  'deadlock.exe': 'Deadlock',
+  'project8.exe': 'Deadlock', // early playtest builds used the codename
   'deltaforceclient-win64-shipping.exe': 'Delta Force',
   'battlebit.exe': 'BattleBit Remastered',
   'insurgencyclient-win64-shipping.exe': 'Insurgency: Sandstorm',
@@ -180,6 +181,13 @@ const KNOWN: Record<string, string> = {
   'rimworldwin64.exe': 'RimWorld',
   'oxygennotincluded.exe': 'Oxygen Not Included',
 };
+
+/** Known games for the settings list: unique names, each with its executables. */
+export function knownGames(): { name: string; exes: string[] }[] {
+  const byName = new Map<string, string[]>();
+  for (const [exe, name] of Object.entries(KNOWN)) byName.set(name, [...(byName.get(name) ?? []), exe]);
+  return [...byName].map(([name, exes]) => ({ name, exes })).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+}
 
 export interface GamesConfig {
   enabled: boolean;

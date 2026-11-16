@@ -1,7 +1,7 @@
 import type { ComponentChildren, VNode } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { AchievementDef, Activity, Channel, PresenceUser, Prestige, Session } from '../../shared/types';
-import { Badge, LevelChip, loadCatalog, PinnedBadges, TIER_NAMES, tierOf } from './Achievements';
+import { Badge, LevelChip, PinnedBadges, reloadCatalog, TIER_NAMES, tierOf, UniqueTitles } from './Achievements';
 import { Avatar, Nick } from './Avatar';
 import {
   CloseIcon,
@@ -23,7 +23,7 @@ import {
 } from './icons';
 import { installHotkeys } from './hotkeys';
 import { openPopout, toggleFullscreen, type Popout } from './popout';
-import { useSettings } from './profile';
+import { bannerUrl, useSettings } from './profile';
 import { ProfileView } from './ProfileView';
 import { ScreenPicker } from './ScreenPicker';
 import { SettingsView } from './SettingsView';
@@ -56,6 +56,9 @@ interface ProfileLite {
   pinned?: string[];
   prestige?: Prestige;
   activity?: Activity | null;
+  uniques?: string[];
+  role?: 'admin' | 'moderator' | null;
+  banner?: number | null;
 }
 
 /** A person shown in the UI: server profile merged with live voice data when we share a channel. */
@@ -74,6 +77,9 @@ interface Person {
   quality?: VoiceState['quality'];
   prestige?: Prestige;
   activity?: Activity | null;
+  uniques?: string[];
+  role?: 'admin' | 'moderator' | null;
+  banner?: number | null;
 }
 
 interface VolumeMenu {
@@ -111,10 +117,27 @@ export function Main({
     const map = new Map<string, ProfileLite>();
     for (const c of channels)
       for (const m of c.members)
-        map.set(m.id, { nickname: m.nickname, avatar: m.avatar ?? null, pinned: m.pinned, prestige: m.prestige });
+        map.set(m.id, {
+          nickname: m.nickname,
+          avatar: m.avatar ?? null,
+          pinned: m.pinned,
+          prestige: m.prestige,
+          uniques: m.uniques,
+          role: m.role,
+          banner: m.banner,
+        });
     // Presence is the freshest source (also covers people who are online but not in voice).
     for (const u of presence)
-      map.set(u.id, { nickname: u.nickname, avatar: u.avatar, pinned: u.pinned, prestige: u.prestige, activity: u.activity });
+      map.set(u.id, {
+        nickname: u.nickname,
+        avatar: u.avatar,
+        pinned: u.pinned,
+        prestige: u.prestige,
+        activity: u.activity,
+        uniques: u.uniques,
+        role: u.role,
+        banner: u.banner,
+      });
     map.set(me.id, { ...map.get(me.id), nickname: me.nickname, avatar: me.avatar ?? null });
     return map;
   }, [channels, presence, me]);
@@ -155,12 +178,13 @@ export function Main({
   // New achievement: special toast + sound.
   useEffect(
     () =>
-      window.echo.onAchievement((code) => {
-        void loadCatalog().then((all) => {
-          const def = all.find((a) => a.code === code);
+      window.echo.onAchievement(({ code, def: sent }) => {
+        // Re-fetch: a hidden achievement is only revealed in the catalog once earned.
+        void reloadCatalog().then((all) => {
+          const def = sent ?? all.find((a) => a.code === code);
           if (!def) return;
           void play('achievement');
-          showToast({ achievement: def }, 6000);
+          showToast({ achievement: def }, def.hidden || def.unique ? 8000 : 6000);
         });
       }),
     [],
@@ -193,6 +217,9 @@ export function Main({
           pinned: prof?.pinned,
           prestige: prof?.prestige ?? server?.prestige,
           activity: prof?.activity ?? null,
+          uniques: prof?.uniques ?? server?.uniques,
+          role: prof?.role ?? server?.role,
+          banner: prof?.banner ?? server?.banner,
           streaming: p.streaming || (server?.streaming ?? false),
           joinedAt: server?.joinedAt || p.joinedAt,
         };
@@ -216,6 +243,9 @@ export function Main({
         ns: null,
         prestige: profiles.get(m.id)?.prestige ?? m.prestige,
         activity: profiles.get(m.id)?.activity ?? null,
+        uniques: profiles.get(m.id)?.uniques ?? m.uniques,
+        role: profiles.get(m.id)?.role ?? m.role,
+        banner: profiles.get(m.id)?.banner ?? m.banner,
       }));
   };
 
@@ -293,13 +323,22 @@ export function Main({
 
         <footer class="userbar">
           <button class="userbar-me" title="Мой профиль" onClick={() => setProfileId(me.id)}>
-            <Avatar id={me.id} name={me.nickname} avatar={me.avatar} size={34} tier={tierOf(myPrestige)} />
+            <Avatar
+              id={me.id}
+              name={me.nickname}
+              avatar={me.avatar}
+              size={34}
+              tier={tierOf(myPrestige)}
+              uniques={profiles.get(me.id)?.uniques}
+            />
             <span class="userbar-name">
               <span class="nick">
                 <Nick name={me.nickname} tier={tierOf(myPrestige)} />
                 <LevelChip prestige={myPrestige} />
               </span>
-              <span class="muted tiny">{isAdmin ? 'админ' : 'в сети'}</span>
+              <span class="muted tiny">
+                {isAdmin ? 'админ' : profiles.get(me.id)?.role === 'moderator' ? 'модератор' : 'в сети'}
+              </span>
             </span>
           </button>
           <button
@@ -369,7 +408,9 @@ export function Main({
           <div class={`toast achievement-toast r-${toast.achievement.rarity}`}>
             <Badge def={toast.achievement} size={44} />
             <div>
-              <div class="achievement-toast-label">Новая ачивка</div>
+              <div class="achievement-toast-label">
+                {toast.achievement.hidden ? 'Секретная ачивка открыта' : toast.achievement.unique ? 'Уникальная ачивка' : 'Новая ачивка'}
+              </div>
               <div class="achievement-toast-title">{toast.achievement.title}</div>
               <div class="muted tiny">{toast.achievement.description}</div>
             </div>
@@ -553,6 +594,7 @@ function ChannelList({
                       size={22}
                       speaking={p.speaking}
                       tier={tierOf(p.prestige)}
+                      uniques={p.uniques}
                     />
                     <span class="member-main">
                       <span class="member-name">
@@ -606,6 +648,9 @@ function OnlineList({
             viewers: [],
             prestige: u.prestige,
             activity: u.activity,
+            uniques: u.uniques,
+            role: u.role,
+            banner: u.banner,
           };
           return (
             <li
@@ -617,7 +662,7 @@ function OnlineList({
               }
               onMouseLeave={() => onHover(null)}
             >
-              <Avatar id={u.id} name={u.nickname} avatar={u.avatar} size={24} tier={tierOf(u.prestige)} />
+              <Avatar id={u.id} name={u.nickname} avatar={u.avatar} size={24} tier={tierOf(u.prestige)} uniques={u.uniques} />
               <span class="member-main">
                 <span class="member-name">
                   <Nick name={u.nickname} tier={tierOf(u.prestige)} />
@@ -746,6 +791,7 @@ function VoiceStage({
                 size={watched ? 40 : 76}
                 speaking={p.speaking}
                 tier={tierOf(p.prestige)}
+                uniques={p.uniques}
               />
               <div class="tile-name">
                 <Nick name={p.nickname} tier={tierOf(p.prestige)} />
@@ -1210,16 +1256,28 @@ function sinceText(joinedAt: number): string {
 
 function HoverCard({ info }: { info: HoverInfo }) {
   const { person: p, rect } = info;
+  const banner = bannerUrl(p.id, p.banner);
   // To the right of the sidebar row, kept inside the window.
-  const top = Math.min(rect.top - 6, window.innerHeight - 130);
+  const top = Math.min(rect.top - 6, window.innerHeight - (banner ? 230 : 140));
   return (
-    <div class="hovercard" style={{ left: rect.right + 10, top }}>
-      <Avatar id={p.id} name={p.nickname} avatar={p.avatar} size={44} speaking={p.speaking} tier={tierOf(p.prestige)} />
+    <div class={`hovercard${banner ? ' with-banner' : ''} tier-${tierOf(p.prestige)}`} style={{ left: rect.right + 10, top }}>
+      {banner && <div class="hovercard-banner" style={{ backgroundImage: `url("${banner}")` }} />}
+      <Avatar
+        id={p.id}
+        name={p.nickname}
+        avatar={p.avatar}
+        size={44}
+        speaking={p.speaking}
+        tier={tierOf(p.prestige)}
+        uniques={p.uniques}
+      />
       <div class="hovercard-body">
         <div class="hovercard-name">
           <Nick name={p.nickname} tier={tierOf(p.prestige)} />
           {p.isLocal && <span class="muted"> (ты)</span>}
         </div>
+        <UniqueTitles uniques={p.uniques} />
+        {p.role && <span class={`role-chip ${p.role}`}>{p.role === 'admin' ? 'Админ' : 'Модератор'}</span>}
         {p.prestige && p.prestige.points > 0 && (
           <div class={`hovercard-rank rank-t${p.prestige.tier}`}>
             {TIER_NAMES[p.prestige.tier]} · уровень {p.prestige.level}

@@ -26,6 +26,13 @@ export function loadCatalog(): Promise<AchievementDef[]> {
   return loading;
 }
 
+/** After earning a hidden achievement the catalog must be fetched again to reveal it. */
+export function reloadCatalog(): Promise<AchievementDef[]> {
+  catalog = null;
+  loading = null;
+  return loadCatalog();
+}
+
 export function useCatalog(): AchievementDef[] {
   const [c, setC] = useState<AchievementDef[]>(catalog ?? []);
   useEffect(() => {
@@ -41,7 +48,43 @@ export const RARITY_LABEL: Record<Rarity, string> = {
   rare: 'Редкая',
   epic: 'Эпическая',
   legendary: 'Легендарная',
+  unique: 'Уникальная',
 };
+
+/** One-of-a-kind achievements: emblem on the avatar and a title under the name. */
+export const UNIQUE_INFO: Record<string, { title: string; icon: string }> = {
+  founder: { title: 'Основатель Echo', icon: 'crown' },
+  beta_tester: { title: 'Первый бета-тестер', icon: 'flask' },
+};
+
+/** Small holographic emblem pinned to the avatar of a unique-achievement holder. */
+export function Emblem({ uniques, size }: { uniques: string[] | undefined; size: number }) {
+  const code = uniques?.find((c) => UNIQUE_INFO[c]);
+  if (!code) return null;
+  const info = UNIQUE_INFO[code]!;
+  const px = Math.max(14, Math.round(size * 0.36));
+  return (
+    <span class="emblem" style={{ width: px, height: px }} title={info.title}>
+      <AchievementIcon icon={info.icon} size={Math.round(px * 0.62)} />
+    </span>
+  );
+}
+
+/** "👑 Основатель Echo" lines under a nickname. */
+export function UniqueTitles({ uniques }: { uniques: string[] | undefined }) {
+  const list = (uniques ?? []).filter((c) => UNIQUE_INFO[c]);
+  if (list.length === 0) return null;
+  return (
+    <span class="unique-titles">
+      {list.map((c) => (
+        <span key={c} class="unique-title">
+          <AchievementIcon icon={UNIQUE_INFO[c]!.icon} size={12} />
+          {UNIQUE_INFO[c]!.title}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 // ---------- icons (24x24 strokes) ----------
 
@@ -168,8 +211,41 @@ export function LevelChip({ prestige }: { prestige: Prestige | undefined }) {
   );
 }
 
-// ---------- more icons for game achievements ----------
+// ---------- more icons for game, hidden and secret achievements ----------
 Object.assign(ICONS, {
+  question: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01" />
+    </>
+  ),
+  echo: (
+    <>
+      <circle cx="12" cy="12" r="2" />
+      <path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7" opacity="0.7" />
+      <path d="M5.5 5.5a9.5 9.5 0 0 0 0 13M18.5 5.5a9.5 9.5 0 0 1 0 13" opacity="0.4" />
+    </>
+  ),
+  sunrise: (
+    <>
+      <path d="M12 2v6M5.2 10.2l1.4 1.4M2 18h2M20 18h2M17.4 11.6l1.4-1.4M22 22H2M8 6l4-4 4 4" />
+      <path d="M16 18a4 4 0 0 0-8 0" />
+    </>
+  ),
+  coffee: (
+    <>
+      <path d="M17 8h1a4 4 0 1 1 0 8h-1" />
+      <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" />
+      <path d="M6 2v2M10 2v2M14 2v2" />
+    </>
+  ),
+  shuffle: (
+    <>
+      <path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6A4 4 0 0 1 16.1 6H22" />
+      <path d="m18 2 4 4-4 4M2 6h1.9c1.5 0 2.9.9 3.6 2.2M22 18h-5.9a4 4 0 0 1-3.3-1.7l-.4-.6" />
+      <path d="m18 14 4 4-4 4" />
+    </>
+  ),
   gamepad: (
     <>
       <path d="M6 11h4M8 9v4M15 12h.01M18 10h.01" />

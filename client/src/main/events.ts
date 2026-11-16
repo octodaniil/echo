@@ -6,8 +6,8 @@ export interface EventHandlers {
   /** Token was rejected or the user was removed by an admin. */
   onUnauthorized(reason: 'kicked' | 'invalid'): void;
   onConnectionChange(connected: boolean): void;
-  /** We just earned an achievement. */
-  onAchievement(code: string): void;
+  /** We just earned an achievement (def included: hidden ones aren't in the catalog yet). */
+  onAchievement(payload: { code: string; def?: unknown }): void;
   /** An admin moved us to another channel. */
   onMove(channelId: number, by: string): void;
   /** Who is online and what they play. */
@@ -57,7 +57,7 @@ export function startEvents(session: ActiveSession, handlers: EventHandlers): ()
               else if (line.startsWith('data: ')) data += line.slice(6);
             }
             if (event === 'channels') handlers.onChannels(JSON.parse(data) as Channel[]);
-            else if (event === 'achievement') handlers.onAchievement((JSON.parse(data) as { code: string }).code);
+            else if (event === 'achievement') handlers.onAchievement(JSON.parse(data) as { code: string; def?: unknown });
             else if (event === 'presence') handlers.onPresence(JSON.parse(data) as unknown[]);
             else if (event === 'move') {
               const m = JSON.parse(data) as { channelId: number; by: string };

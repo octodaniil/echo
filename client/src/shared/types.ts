@@ -2,11 +2,14 @@ export interface User {
   id: string;
   nickname: string;
   isAdmin: boolean;
+  isModerator?: boolean;
+  /** Profile banner version (cache key); null = none. */
+  banner?: number | null;
   /** Avatar version (cache key); null = no avatar. */
   avatar: number | null;
 }
 
-export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'unique';
 
 export interface AchievementDef {
   code: string;
@@ -16,6 +19,11 @@ export interface AchievementDef {
   category?: string;
   icon: string;
   manual?: boolean;
+  /** Secret until earned (the catalog shows a placeholder). */
+  hidden?: boolean;
+  /** One of a kind; holder = nickname of the only person who has it. */
+  unique?: boolean;
+  holder?: string | null;
 }
 
 /** Rank from achievements: points by rarity -> level and tier (0 none … 4 legend). */
@@ -40,6 +48,9 @@ export interface PresenceUser {
   pinned: string[];
   activity: Activity | null;
   prestige?: Prestige;
+  uniques?: string[];
+  role?: 'admin' | 'moderator' | null;
+  banner?: number | null;
 }
 
 export type UpdateStatus =
@@ -66,6 +77,9 @@ export interface Profile extends User {
   achievements: { code: string; awardedAt: number }[];
   pinned: string[];
   prestige: Prestige;
+  uniques?: string[];
+  /** Full definitions of hidden achievements this person has earned. */
+  revealed?: AchievementDef[];
 }
 
 export interface ChannelMember {
@@ -75,6 +89,9 @@ export interface ChannelMember {
   /** Achievement codes the user shows off. */
   pinned?: string[];
   prestige?: Prestige;
+  uniques?: string[];
+  role?: 'admin' | 'moderator' | null;
+  banner?: number | null;
   streaming: boolean;
   joinedAt: number;
 }

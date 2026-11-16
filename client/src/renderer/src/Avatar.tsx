@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+import { Emblem } from './Achievements';
 import { avatarUrl } from './profile';
 
 // Stable pleasant hue per user so letter avatars are distinguishable.
@@ -19,6 +20,7 @@ export function Avatar({
   size = 32,
   speaking = false,
   tier = 0,
+  uniques,
 }: {
   id: string;
   name: string;
@@ -26,13 +28,15 @@ export function Avatar({
   size?: number;
   speaking?: boolean;
   tier?: number;
+  /** Unique achievements: holographic emblem in the corner. */
+  uniques?: string[];
 }) {
   const url = avatarUrl(id, avatar);
   const [broken, setBroken] = useState<string | null>(null);
   const showImage = url && broken !== url;
   return (
     <span
-      class={`avatar-wrap tier-${tier}`}
+      class={`avatar-wrap tier-${tier}${uniques?.length ? ' has-unique' : ''}`}
       style={{ width: size, height: size, '--ring': `${Math.max(2, Math.round(size * 0.055))}px` }}
     >
       <span
@@ -50,6 +54,7 @@ export function Avatar({
           name.trim().charAt(0).toUpperCase() || '?'
         )}
       </span>
+      {size >= 20 && <Emblem uniques={uniques} size={size} />}
     </span>
   );
 }

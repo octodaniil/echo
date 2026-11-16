@@ -14,7 +14,7 @@ import type {
 import { authed, request } from './api';
 import { startEvents } from './events';
 import { clearSession, loadSession, normalizeServerUrl, saveSession, type ActiveSession } from './session';
-import { listWindowedApps, startGameWatcher, type GamesConfig } from './games';
+import { knownGames, listWindowedApps, startGameWatcher, type GamesConfig } from './games';
 import { installDisplayMediaHandler, listSources, selectSource } from './screen';
 import { createTray, type TrayState } from './tray';
 import { checkNow, installUpdateNow, startUpdater, updateStatus, type UpdateInfo } from './updater';
@@ -84,8 +84,8 @@ function beginSession(s: ActiveSession) {
     onUnauthorized(reason) {
       void endSession(reason);
     },
-    onAchievement(code) {
-      send('achievement', code);
+    onAchievement(payload) {
+      send('achievement', payload);
     },
     onMove(channelId, by) {
       send('move', { channelId, by });
@@ -157,6 +157,7 @@ function registerIpc() {
   });
   handle('games:current', () => games.current);
   handle('games:apps', () => listWindowedApps());
+  handle('games:known', () => knownGames());
 
   // ---------- tray & window ----------
 
@@ -208,6 +209,19 @@ function registerIpc() {
       method: 'PUT',
       raw: { data, type: 'image/webp' },
     });
+    return updateUser(user);
+  });
+
+  handle('me:set-banner', async (data: Uint8Array, type: string) => {
+    const { user } = await authed<{ user: User }>(requireSession(), '/api/me/banner', {
+      method: 'PUT',
+      raw: { data, type },
+    });
+    return updateUser(user);
+  });
+
+  handle('me:remove-banner', async () => {
+    const { user } = await authed<{ user: User }>(requireSession(), '/api/me/banner', { method: 'DELETE' });
     return updateUser(user);
   });
 

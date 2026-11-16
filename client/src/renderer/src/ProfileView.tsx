@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { AchievementDef, Activity, Profile, Rarity } from '../../shared/types';
-import { Badge, categories, RARITY_LABEL, TIER_NAMES, useCatalog } from './Achievements';
+import { Badge, categories, RARITY_LABEL, TIER_NAMES, UniqueTitles, useCatalog } from './Achievements';
 import { Avatar, Nick } from './Avatar';
+import { bannerUrl } from './profile';
 import { CloseIcon } from './icons';
 
-const RARITY_ORDER: Rarity[] = ['legendary', 'epic', 'rare', 'common'];
+const RARITY_ORDER: Rarity[] = ['unique', 'legendary', 'epic', 'rare', 'common'];
 const MAX_PINNED = 3;
 
 function hours(secs: number): string {
@@ -29,7 +30,7 @@ export function ProfileView({
   activity: Activity | null;
   onClose: () => void;
 }) {
-  const catalog = useCatalog();
+  const baseCatalog = useCatalog();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manage, setManage] = useState(false);
@@ -53,7 +54,11 @@ export function ProfileView({
     };
   }, [userId]);
 
+  // Hidden achievements this person earned come with their real definition.
+  const revealed = new Map((profile?.revealed ?? []).map((d) => [d.code, d]));
+  const catalog = baseCatalog.map((d) => revealed.get(d.code) ?? d);
   const owned = new Map((profile?.achievements ?? []).map((a) => [a.code, a.awardedAt]));
+  const holo = (profile?.uniques?.length ?? 0) > 0;
   const pinned = profile?.pinned ?? [];
   const byCode = (c: string) => catalog.find((a) => a.code === c);
   const pinnedDefs = pinned.map(byCode).filter((a): a is AchievementDef => !!a);
@@ -96,8 +101,11 @@ export function ProfileView({
 
   return (
     <div class="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div class={`modal profile tier-${tier}`}>
-        <div class="profile-banner">
+      <div class={`modal profile tier-${tier}${holo ? ' holo' : ''}`}>
+        <div
+          class={`profile-banner${profile?.banner ? ' custom' : ''}`}
+          style={profile?.banner ? { backgroundImage: `url("${bannerUrl(profile.id, profile.banner)}")` } : undefined}
+        >
           <button class="icon-btn profile-close" title="Закрыть" onClick={onClose}>
             <CloseIcon size={18} />
           </button>
@@ -109,14 +117,23 @@ export function ProfileView({
           <>
             <header class="profile-head">
               <span class="profile-avatar">
-                <Avatar id={profile.id} name={profile.nickname} avatar={profile.avatar} size={96} tier={tier} />
+                <Avatar
+                  id={profile.id}
+                  name={profile.nickname}
+                  avatar={profile.avatar}
+                  size={96}
+                  tier={tier}
+                  uniques={profile.uniques}
+                />
               </span>
               <div class="profile-id">
                 <h2>
                   <Nick name={profile.nickname} tier={tier} />
                 </h2>
+                <UniqueTitles uniques={profile.uniques} />
                 <div class="profile-chips">
                   {profile.isAdmin && <span class="chip-static admin">Админ</span>}
+                  {profile.isModerator && !profile.isAdmin && <span class="chip-static moderator">Модератор</span>}
                   <span class="chip-static">
                     {owned.size} / {catalog.length} ачивок
                   </span>
@@ -228,11 +245,15 @@ export function ProfileView({
                           >
                             <Badge def={d} size={44} locked={!has} title="" />
                             <span class="ach-text">
-                              <span class="ach-title">{has || manage ? d.title : '???'}</span>
+                              <span class="ach-title">
+                                {has || manage ? d.title : d.hidden ? 'Скрытая ачивка' : '???'}
+                                {d.unique && <span class="one-of-one">1 из 1</span>}
+                              </span>
                               <span class="ach-desc">{d.description}</span>
                               <span class={`ach-meta r-${d.rarity}`}>
                                 {RARITY_LABEL[d.rarity]}
                                 {has && ` · ${new Date(owned.get(d.code)!).toLocaleDateString('ru-RU')}`}
+                                {d.unique && !has && (d.holder ? ` · уже у ${d.holder}` : ' · ещё ни у кого')}
                                 {isPinned && ' · закреплена'}
                                 {manage && (has ? ' · забрать' : ' · выдать')}
                               </span>

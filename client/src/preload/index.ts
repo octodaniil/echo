@@ -42,6 +42,8 @@ const api = {
   updateProfile: (patch: { nickname: string }) => call<Session>('me:update', patch),
   setAvatar: (webp: Uint8Array) => call<Session>('me:set-avatar', webp),
   removeAvatar: () => call<Session>('me:remove-avatar'),
+  setBanner: (data: Uint8Array, type: string) => call<Session>('me:set-banner', data, type),
+  removeBanner: () => call<Session>('me:remove-banner'),
 
   getAchievementCatalog: () =>
     call<{ catalog: AchievementDef[]; categories?: AchievementCategory[] }>('ach:catalog'),
@@ -49,7 +51,7 @@ const api = {
   setPinned: (codes: string[]) => call<string[]>('me:pinned', codes),
   awardAchievement: (userId: string, code: string) => call<unknown>('ach:award', userId, code),
   revokeAchievement: (userId: string, code: string) => call<unknown>('ach:revoke', userId, code),
-  onAchievement: (cb: (code: string) => void) => on('achievement', cb),
+  onAchievement: (cb: (a: { code: string; def?: AchievementDef }) => void) => on('achievement', cb),
 
   getPresence: () => call<PresenceUser[]>('presence:get'),
   onPresence: (cb: (users: PresenceUser[]) => void) => on('presence', cb),
@@ -58,6 +60,7 @@ const api = {
   getCurrentGame: () => call<string | null>('games:current'),
   onGame: (cb: (game: string | null) => void) => on('game', cb),
   listWindowedApps: () => call<{ exe: string; title: string }[]>('games:apps'),
+  listKnownGames: () => call<{ name: string; exes: string[] }[]>('games:known'),
 
   setTrayState: (state: { micMuted: boolean; deafened: boolean; channel: string | null }) => call<void>('tray:state', state),
   setCloseToTray: (on: boolean) => call<void>('app:set-close-to-tray', on),
