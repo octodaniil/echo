@@ -13,6 +13,9 @@ export interface User {
   avatar_version: number | null;
   /** JSON array of achievement codes shown on the profile. */
   pinned: string;
+  is_moderator: number;
+  banner_version: number | null;
+  banner_type: string | null;
 }
 
 export interface Invite {
@@ -77,6 +80,11 @@ addColumn('voice_seconds', 'voice_seconds INTEGER NOT NULL DEFAULT 0');
 addColumn('streams_count', 'streams_count INTEGER NOT NULL DEFAULT 0');
 // Achievement codes shown on the profile (JSON array).
 addColumn('pinned', "pinned TEXT NOT NULL DEFAULT '[]'");
+// Moderator role (no extra powers yet).
+addColumn('is_moderator', 'is_moderator INTEGER NOT NULL DEFAULT 0');
+// Profile banner: version (cache key) and stored image type.
+addColumn('banner_version', 'banner_version INTEGER');
+addColumn('banner_type', 'banner_type TEXT');
 
 export const avatarDir = join(dirname(config.dbPath), 'avatars');
 mkdirSync(avatarDir, { recursive: true });
@@ -103,13 +111,13 @@ export function transaction<T>(fn: () => T): T {
 
 export const queries = {
   userByTokenHash: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned FROM users WHERE token_hash = ?',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type FROM users WHERE token_hash = ?',
   ),
   userByNickname: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned FROM users WHERE nickname = ? COLLATE NOCASE',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type FROM users WHERE nickname = ? COLLATE NOCASE',
   ),
   listUsers: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned FROM users ORDER BY created_at',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type FROM users ORDER BY created_at',
   ),
   insertUser: db.prepare(
     'INSERT INTO users (id, nickname, is_admin, token_hash, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -118,9 +126,11 @@ export const queries = {
   touchUser: db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?'),
   renameUser: db.prepare('UPDATE users SET nickname = ? WHERE id = ?'),
   setAvatarVersion: db.prepare('UPDATE users SET avatar_version = ? WHERE id = ?'),
-  userProfiles: db.prepare('SELECT id, nickname, avatar_version, pinned FROM users'),
+  setModerator: db.prepare('UPDATE users SET is_moderator = ? WHERE id = ?'),
+  setBanner: db.prepare('UPDATE users SET banner_version = ?, banner_type = ? WHERE id = ?'),
+  userProfiles: db.prepare('SELECT id, nickname, avatar_version, pinned, is_admin, is_moderator, banner_version FROM users'),
   userById: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned FROM users WHERE id = ?',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type FROM users WHERE id = ?',
   ),
 
   inviteByCode: db.prepare('SELECT * FROM invites WHERE code = ?'),

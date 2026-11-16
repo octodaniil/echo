@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { createInvite } from './auth.ts';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { award, CATALOG, isAchievement, revoke } from './achievements.ts';
+import { award, CATALOG, holderOf, isAchievement, revoke } from './achievements.ts';
 import { avatarDir, queries, type Channel, type Invite, type User } from './db.ts';
 import { roomService } from './livekit.ts';
 
@@ -63,6 +63,7 @@ switch (command) {
     }
     queries.deleteUser.run(user.id);
     rmSync(join(avatarDir, `${user.id}.webp`), { force: true });
+    rmSync(join(avatarDir, `${user.id}.banner`), { force: true });
     // Drop them from any voice channel they are sitting in right now.
     const rooms = await roomService.listRooms().catch(() => []);
     await Promise.all(rooms.map((r) => roomService.removeParticipant(r.name, user.id).catch(() => {})));
@@ -82,14 +83,34 @@ switch (command) {
       console.error(`Нет ачивки "${code}". Коды: ${CATALOG.map((a) => a.code).join(', ')}`);
       process.exit(1);
     }
-    if (command === 'award') award(user.id, code);
-    else revoke(user.id, code);
+    if (command === 'award') {
+      const holder = holderOf(code);
+      if (CATALOG.find((a) => a.code === code)?.unique && holder && holder !== user.id) {
+        const name = (queries.userById.get(holder) as User | undefined)?.nickname ?? '?';
+        console.error(`Это уникальная ачивка, она уже у ${name}. Сначала забери: revoke ${name} ${code}`);
+        process.exit(1);
+      }
+      award(user.id, code);
+    } else revoke(user.id, code);
     console.log(`${command === 'award' ? 'Выдано' : 'Забрано'}: «${CATALOG.find((a) => a.code === code)!.title}» — ${user.nickname}`);
     break;
   }
 
   case 'achievements': {
     for (const a of CATALOG) console.log(`${a.code.padEnd(12)} ${a.rarity.padEnd(10)} ${a.title}${a.manual ? ' (только вручную)' : ''}`);
+    break;
+  }
+
+  case 'role': {
+    // role <nick> moderator|member
+    const [nickname, role] = rest;
+    const user = nickname ? (queries.userByNickname.get(nickname) as User | undefined) : undefined;
+    if (!user || (role !== 'moderator' && role !== 'member')) {
+      console.error('Использование: role <ник> moderator|member');
+      process.exit(1);
+    }
+    queries.setModerator.run(role === 'moderator' ? 1 : 0, user.id);
+    console.log(`${user.nickname}: ${role === 'moderator' ? 'теперь модератор' : 'больше не модератор'}`);
     break;
   }
 
@@ -107,6 +128,7 @@ switch (command) {
   award <ник> <код>                         выдать ачивку
   revoke <ник> <код>                        забрать ачивку
   achievements                              список ачивок
+  role <ник> moderator|member               назначить / снять модератора
   channels                                  список каналов`);
     process.exit(command ? 1 : 0);
 }

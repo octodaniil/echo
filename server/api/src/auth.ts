@@ -93,6 +93,8 @@ export function publicUser(user: User) {
     id: user.id,
     nickname: user.nickname,
     isAdmin: Boolean(user.is_admin),
+    isModerator: Boolean(user.is_moderator),
     avatar: user.avatar_version ?? null,
+    banner: user.banner_version ?? null,
   };
 }

@@ -1,6 +1,6 @@
 import { db, queries, type User } from './db.ts';
 
-export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'unique';
 export type Category = 'voice' | 'stream' | 'games' | 'social' | 'special';
 
 export interface AchievementDef {
@@ -13,6 +13,10 @@ export interface AchievementDef {
   icon: string;
   /** Only an admin can give it. */
   manual?: boolean;
+  /** Secret: title and description are revealed only once earned. */
+  hidden?: boolean;
+  /** One of a kind: only a single person can ever hold it. */
+  unique?: boolean;
 }
 
 export const CATEGORIES: { id: Category; title: string }[] = [
@@ -25,8 +29,8 @@ export const CATEGORIES: { id: Category; title: string }[] = [
 
 export const CATALOG: AchievementDef[] = [
   // special
-  { code: 'beta_tester', title: 'Первый бета-тестер', description: 'Был с Echo с самого начала и ловил баги первым', rarity: 'legendary', category: 'special', icon: 'flask', manual: true },
-  { code: 'founder', title: 'Основатель', description: 'Поднял свой сервер Echo', rarity: 'epic', category: 'special', icon: 'crown' },
+  { code: 'founder', title: 'Основатель', description: 'Поднял свой сервер Echo. Такой человек может быть только один', rarity: 'unique', category: 'special', icon: 'crown', unique: true },
+  { code: 'beta_tester', title: 'Первый бета-тестер', description: 'Был с Echo с самого начала и ловил баги первым. Такой человек может быть только один', rarity: 'unique', category: 'special', icon: 'flask', manual: true, unique: true },
   // voice
   { code: 'first_steps', title: 'Первые шаги', description: 'Впервые зашёл в голосовой канал', rarity: 'common', category: 'voice', icon: 'door' },
   { code: 'voice_1h', title: 'Разговорчивый', description: 'Провёл в голосе 1 час', rarity: 'common', category: 'voice', icon: 'wave' },
@@ -46,7 +50,29 @@ export const CATALOG: AchievementDef[] = [
   { code: 'stream_10', title: 'Стример', description: 'Провёл 10 трансляций', rarity: 'rare', category: 'stream', icon: 'signal' },
   // social
   { code: 'full_house', title: 'Полный сбор', description: 'Был в канале, где собрались 5 человек и больше', rarity: 'rare', category: 'social', icon: 'people' },
+  // hidden — the catalog only shows "secret achievement" until someone earns them
+  { code: 'echo_of_silence', title: 'Эхо тишины', description: 'Просидел час в голосовом канале совсем один', rarity: 'rare', category: 'voice', icon: 'echo', hidden: true },
+  { code: 'early_bird', title: 'Ранняя пташка', description: 'Зашёл в голос между 6 и 7 утра', rarity: 'rare', category: 'voice', icon: 'sunrise', hidden: true },
+  { code: 'all_nighter', title: 'Не спится', description: '8 часов подряд в одном канале', rarity: 'legendary', category: 'voice', icon: 'coffee', hidden: true },
+  { code: 'hopper', title: 'Попрыгунчик', description: 'Сменил канал 10 раз за 10 минут', rarity: 'epic', category: 'social', icon: 'shuffle', hidden: true },
 ];
+
+/** What clients see: hidden achievements are masked unless the viewer has earned them. */
+export function catalogFor(ownedCodes: Set<string>) {
+  return CATALOG.map((a) => {
+    if (a.hidden && !ownedCodes.has(a.code)) {
+      return { code: a.code, title: 'Скрытая ачивка', description: 'Получишь — узнаешь', rarity: a.rarity, category: a.category, icon: 'question', hidden: true };
+    }
+    if (a.unique) {
+      const holder = holderOf(a.code);
+      const name = holder ? (queries.userById.get(holder) as User | undefined)?.nickname : undefined;
+      return { ...a, holder: name ?? null };
+    }
+    return a;
+  });
+}
+
+export const definition = (code: string) => CATALOG.find((a) => a.code === code);
 
 const byCode = new Map(CATALOG.map((a) => [a.code, a]));
 export const isAchievement = (code: string) => byCode.has(code);
@@ -83,7 +109,13 @@ const q = {
   ),
   gameTotals: db.prepare('SELECT COALESCE(SUM(seconds), 0) AS total, COUNT(*) AS games FROM user_games WHERE user_id = ?'),
   topGames: db.prepare('SELECT game, seconds FROM user_games WHERE user_id = ? ORDER BY seconds DESC LIMIT 3'),
+  holderOf: db.prepare('SELECT user_id FROM user_achievements WHERE code = ? LIMIT 1'),
 };
+
+/** Who holds a unique achievement (if anyone). */
+export function holderOf(code: string): string | null {
+  return (q.holderOf.get(code) as { user_id: string } | undefined)?.user_id ?? null;
+}
 
 export function listAchievements(userId: string) {
   return (q.list.all(userId) as { code: string; awarded_at: number }[])
@@ -96,9 +128,14 @@ export function setAwardListener(fn: (userId: string, code: string) => void) {
   onAwarded = fn;
 }
 
-/** Gives an achievement; returns true if it is new. */
+/** Gives an achievement; returns true if it is new. Unique ones go to the first person only. */
 export function award(userId: string, code: string): boolean {
-  if (!byCode.has(code)) return false;
+  const def = byCode.get(code);
+  if (!def) return false;
+  if (def.unique) {
+    const holder = holderOf(code);
+    if (holder && holder !== userId) return false;
+  }
   const res = q.insert.run(userId, code, Date.now());
   const isNew = Number(res.changes) > 0;
   if (isNew) onAwarded(userId, code);
@@ -167,7 +204,12 @@ interface Session {
   room: string;
   since: number;
   accounted: number;
+  /** Since when they've been alone in the room (null = not alone). */
+  aloneSince: number | null;
 }
+
+/** Recent channel switches per user, for "hopper". */
+const switches = new Map<string, number[]>();
 
 /** Who is in voice right now, for time tracking. Keyed by user id. */
 const sessions = new Map<string, Session>();
@@ -177,8 +219,15 @@ export function voiceJoined(userId: string, room: string) {
   const now = Date.now();
   const prev = sessions.get(userId);
   if (prev && prev.room !== room) voiceLeft(userId, prev.room);
-  if (!sessions.has(userId)) sessions.set(userId, { room, since: now, accounted: now });
+  if (!sessions.has(userId)) sessions.set(userId, { room, since: now, accounted: now, aloneSince: null });
   award(userId, 'first_steps');
+
+  const h = localHour(now);
+  if (h >= 6 && h < 7) award(userId, 'early_bird');
+
+  const recent = [...(switches.get(userId) ?? []), now].filter((t) => now - t < 10 * 60_000);
+  switches.set(userId, recent);
+  if (recent.length >= 10) award(userId, 'hopper');
   checkTogether();
 }
 
@@ -197,13 +246,21 @@ function flush(userId: string, s: Session, now: number) {
   }
   checkVoiceTotals(userId);
   if (now - s.since >= 4 * HOUR * 1000) award(userId, 'marathon');
+  if (now - s.since >= 8 * HOUR * 1000) award(userId, 'all_nighter');
+
+  const alone = ![...sessions].some(([id, other]) => id !== userId && other.room === s.room);
+  if (!alone) s.aloneSince = null;
+  else {
+    s.aloneSince ??= now;
+    if (now - s.aloneSince >= HOUR * 1000) award(userId, 'echo_of_silence');
+  }
   const h = localHour(now);
   if (h >= 3 && h < 5) award(userId, 'night_owl');
 }
 
 // ---------- prestige: rank from achievements ----------
 
-const POINTS: Record<Rarity, number> = { common: 10, rare: 25, epic: 60, legendary: 150 };
+const POINTS: Record<Rarity, number> = { common: 10, rare: 25, epic: 60, legendary: 150, unique: 200 };
 /** Tier floors: none, bronze, silver, gold, legend. */
 const TIERS = [0, 30, 100, 220, 400];
 
@@ -241,6 +298,15 @@ export function prestigeMap(): Map<string, Prestige> {
 }
 
 export const prestigeOf = (userId: string) => prestigeMap().get(userId) ?? prestigeFromPoints(0);
+
+/** Who holds which one-of-a-kind achievements (they get special looks everywhere). */
+export function uniquesMap(): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const r of allAwards.all() as { user_id: string; code: string }[]) {
+    if (byCode.get(r.code)?.unique) out.set(r.user_id, [...(out.get(r.user_id) ?? []), r.code]);
+  }
+  return out;
+}
 
 // ---------- games ----------
 

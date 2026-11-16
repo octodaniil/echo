@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger, FastifyReply } from 'fastify';
 import { ParticipantInfo_State, TrackSource, type WebhookEvent } from 'livekit-server-sdk';
-import { gameChanged, getPinnedFromRow, prestigeFromPoints, prestigeMap, roomMembers, setAwardListener, streamStarted, voiceJoined, voiceLeft } from './achievements.ts';
+import { definition, gameChanged, getPinnedFromRow, prestigeFromPoints, prestigeMap, roomMembers, uniquesMap, setAwardListener, streamStarted, voiceJoined, voiceLeft } from './achievements.ts';
 import { queries, type Channel } from './db.ts';
 import { channelIdFromRoom, roomNameForChannel, roomService, toMember, type ChannelMember } from './livekit.ts';
 
@@ -14,15 +14,28 @@ const subscribers = new Set<FastifyReply>();
 
 let log: FastifyBaseLogger | undefined;
 
+/** Displayed role: admin > moderator > nothing. */
+const roleOf = (u: { is_admin: number; is_moderator: number }) =>
+  u.is_admin ? 'admin' : u.is_moderator ? 'moderator' : null;
+
 export function channelsSnapshot() {
   const channels = queries.listChannels.all() as unknown as Channel[];
   // Current nickname/avatar come from our DB, so profile edits show up without rejoining.
   const profiles = new Map(
     (
-      queries.userProfiles.all() as { id: string; nickname: string; avatar_version: number | null; pinned: string }[]
+      queries.userProfiles.all() as {
+        id: string;
+        nickname: string;
+        avatar_version: number | null;
+        pinned: string;
+        is_admin: number;
+        is_moderator: number;
+        banner_version: number | null;
+      }[]
     ).map((u) => [u.id, u]),
   );
   const prestige = prestigeMap();
+  const uniques = uniquesMap();
   return channels.map((c) => ({
     id: c.id,
     name: c.name,
@@ -35,6 +48,9 @@ export function channelsSnapshot() {
             avatar: profile.avatar_version,
             pinned: getPinnedFromRow(profile.pinned),
             prestige: prestige.get(m.id) ?? prestigeFromPoints(0),
+            uniques: uniques.get(m.id) ?? [],
+            role: roleOf(profile),
+            banner: profile.banner_version,
           }
         : m;
     }),
@@ -52,7 +68,9 @@ export function broadcastChannels() {
 
 /** Tells one user's open connections about a new achievement. */
 setAwardListener((userId, code) => {
-  for (const reply of subscribers) if (reply.request.user?.id === userId) send(reply, 'achievement', { code });
+  // Full definition included: hidden achievements aren't in the client's catalog yet.
+  const def = definition(code);
+  for (const reply of subscribers) if (reply.request.user?.id === userId) send(reply, 'achievement', { code, def });
   // Ranks depend on achievements: let everyone see the new glow.
   queueMicrotask(() => {
     broadcastChannels();
@@ -97,11 +115,15 @@ const onlineIds = () => new Set([...subscribers].map((r) => r.request.user?.id).
 export function presenceSnapshot() {
   const online = onlineIds();
   const prestige = prestigeMap();
+  const uniques = uniquesMap();
   const rows = queries.userProfiles.all() as {
     id: string;
     nickname: string;
     avatar_version: number | null;
     pinned: string;
+    is_admin: number;
+    is_moderator: number;
+    banner_version: number | null;
   }[];
   return rows
     .filter((u) => online.has(u.id))
@@ -112,6 +134,9 @@ export function presenceSnapshot() {
       pinned: getPinnedFromRow(u.pinned),
       activity: activities.get(u.id) ?? null,
       prestige: prestige.get(u.id) ?? prestigeFromPoints(0),
+      uniques: uniques.get(u.id) ?? [],
+      role: roleOf(u),
+      banner: u.banner_version,
     }))
     .sort((a, b) => a.nickname.localeCompare(b.nickname, 'ru'));
 }

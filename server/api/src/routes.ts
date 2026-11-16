@@ -4,14 +4,17 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   award,
-  CATALOG,
+  catalogFor,
   CATEGORIES,
+  definition,
+  holderOf,
   getPinned,
   getStats,
   isAchievement,
   listAchievements,
   MAX_PINNED,
   prestigeOf,
+  uniquesMap,
   revoke,
   setPinned,
 } from './achievements.ts';
@@ -50,6 +53,18 @@ const channelName = z.string().trim().min(1, 'Пустое название').ma
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 
 const avatarPath = (userId: string) => join(avatarDir, `${userId}.webp`);
+const bannerPath = (userId: string) => join(avatarDir, `${userId}.banner`);
+const BANNER_MAX = 4 * 1024 * 1024;
+
+/** Real image type from magic bytes (never trust the declared content-type). */
+function imageType(data: unknown): string | null {
+  if (!Buffer.isBuffer(data) || data.length < 12) return null;
+  if (data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  if (data.toString('ascii', 0, 6) === 'GIF87a' || data.toString('ascii', 0, 6) === 'GIF89a') return 'image/gif';
+  if (data[0] === 0x89 && data.toString('ascii', 1, 4) === 'PNG') return 'image/png';
+  if (data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg';
+  return null;
+}
 
 function getChannel(id: number): Channel {
   const channel = queries.channelById.get(id) as Channel | undefined;
@@ -93,7 +108,10 @@ export async function registerRoutes(app: FastifyInstance) {
 
   // ---------- profiles & achievements ----------
 
-  app.get('/api/achievements', { preHandler: requireUser }, async () => ({ catalog: CATALOG, categories: CATEGORIES }));
+  app.get('/api/achievements', { preHandler: requireUser }, async (req) => ({
+    catalog: catalogFor(new Set(listAchievements(req.user.id).map((a) => a.code))),
+    categories: CATEGORIES,
+  }));
 
   app.get('/api/users/:id/profile', { preHandler: requireUser }, async (req) => {
     const { id } = parse(z.object({ id: z.string() }), req.params);
@@ -106,8 +124,13 @@ export async function registerRoutes(app: FastifyInstance) {
         lastSeenAt: user.last_seen_at,
         ...getStats(id),
         achievements: listAchievements(id),
+        // Hidden achievements this person has earned are shown in full on their profile.
+        revealed: listAchievements(id)
+          .map((a) => definition(a.code))
+          .filter((d) => d?.hidden),
         pinned: getPinned(id),
         prestige: prestigeOf(id),
+        uniques: uniquesMap().get(id) ?? [],
       },
     };
   });
@@ -125,6 +148,11 @@ export async function registerRoutes(app: FastifyInstance) {
     const body = parse(z.object({ code: z.string() }), req.body);
     if (!queries.userById.get(id)) throw new HttpError(404, 'Пользователь не найден');
     if (!isAchievement(body.code)) throw new HttpError(400, 'Нет такой ачивки');
+    const holder = definition(body.code)?.unique ? holderOf(body.code) : null;
+    if (holder && holder !== id) {
+      const name = (queries.userById.get(holder) as User | undefined)?.nickname ?? 'кого-то другого';
+      throw new HttpError(409, `Это уникальная ачивка, она уже у ${name}`);
+    }
     award(id, body.code);
     return { achievements: listAchievements(id) };
   });
@@ -138,19 +166,16 @@ export async function registerRoutes(app: FastifyInstance) {
 
   // ---------- avatars ----------
 
-  // Clients send a ready 128x128 WebP; we only check it really is one.
-  app.addContentTypeParser('image/webp', { parseAs: 'buffer', bodyLimit: 512 * 1024 }, (_req, body, done) =>
-    done(null, body),
-  );
+  // Raw image uploads (avatars, banners). Each route checks the real format and size.
+  for (const type of ['image/webp', 'image/gif', 'image/png', 'image/jpeg']) {
+    app.addContentTypeParser(type, { parseAs: 'buffer', bodyLimit: BANNER_MAX }, (_req, body, done) => done(null, body));
+  }
 
+  // Clients send a ready 128x128 WebP; we only check it really is one.
   app.put('/api/me/avatar', { preHandler: requireUser }, async (req) => {
     const data = req.body as Buffer;
-    const isWebp =
-      Buffer.isBuffer(data) &&
-      data.length > 12 &&
-      data.toString('ascii', 0, 4) === 'RIFF' &&
-      data.toString('ascii', 8, 12) === 'WEBP';
-    if (!isWebp) throw new HttpError(400, 'Нужна картинка в формате WebP');
+    if (imageType(data) !== 'image/webp') throw new HttpError(400, 'Нужна картинка в формате WebP');
+    if (data.length > 512 * 1024) throw new HttpError(413, 'Аватар слишком большой');
     await writeFile(avatarPath(req.user.id), data);
     queries.setAvatarVersion.run(Date.now(), req.user.id);
     broadcastChannels();
@@ -178,6 +203,43 @@ export async function registerRoutes(app: FastifyInstance) {
         .send(data);
     } catch {
       throw new HttpError(404, 'Нет аватара');
+    }
+  });
+
+  // ---------- profile banners (static or animated) ----------
+
+  app.put('/api/me/banner', { preHandler: requireUser }, async (req) => {
+    const data = req.body as Buffer;
+    const type = imageType(data);
+    if (!type) throw new HttpError(400, 'Нужна картинка: GIF, WebP, PNG или JPEG');
+    if (data.length > BANNER_MAX) throw new HttpError(413, 'Баннер больше 4 МБ');
+    await writeFile(bannerPath(req.user.id), data);
+    queries.setBanner.run(Date.now(), type, req.user.id);
+    broadcastChannels();
+    broadcastPresence();
+    return { user: publicUser(queries.userById.get(req.user.id) as unknown as User) };
+  });
+
+  app.delete('/api/me/banner', { preHandler: requireUser }, async (req) => {
+    await rm(bannerPath(req.user.id), { force: true });
+    queries.setBanner.run(null, null, req.user.id);
+    broadcastChannels();
+    broadcastPresence();
+    return { user: publicUser(queries.userById.get(req.user.id) as unknown as User) };
+  });
+
+  app.get('/api/banners/:id', async (req, reply) => {
+    const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
+    const row = queries.userById.get(id) as User | undefined;
+    if (!row?.banner_version) throw new HttpError(404, 'Нет баннера');
+    try {
+      const data = await readFile(bannerPath(id));
+      return reply
+        .header('content-type', row.banner_type ?? 'application/octet-stream')
+        .header('cache-control', 'public, max-age=31536000, immutable')
+        .send(data);
+    } catch {
+      throw new HttpError(404, 'Нет баннера');
     }
   });
 
@@ -271,6 +333,7 @@ export async function registerRoutes(app: FastifyInstance) {
     if (id === req.user.id) throw new HttpError(400, 'Нельзя удалить самого себя');
     queries.deleteUser.run(id);
     await rm(avatarPath(id), { force: true });
+    await rm(bannerPath(id), { force: true });
     await kickFromAllRooms(id);
     broadcastKicked(id);
     return { ok: true };
