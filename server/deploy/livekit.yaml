@@ -1,0 +1,27 @@
+# LiveKit SFU config. API key/secret come from the LIVEKIT_KEYS env var (see docker-compose.yml).
+port: 7880
+
+rtc:
+  # Media over UDP (preferred, lowest latency) on this range, TCP 7881 as fallback.
+  port_range_start: 50000
+  port_range_end: 50100
+  tcp_port: 7881
+  # Discover the public IP via STUN so remote clients get the right ICE candidate.
+  # LAN clients still get the local-interface candidates and connect directly.
+  use_external_ip: true
+
+room:
+  # Voice channels are permanent from the user's point of view; LiveKit rooms are
+  # created on first join and dropped shortly after the last person leaves.
+  auto_create: true
+  empty_timeout: 60
+  departure_timeout: 10
+
+webhook:
+  # Must match LIVEKIT_API_KEY in .env (the key name, not the secret).
+  api_key: echo
+  urls:
+    - http://127.0.0.1:3000/api/livekit/webhook
+
+logging:
+  level: info

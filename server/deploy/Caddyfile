@@ -1,0 +1,19 @@
+{
+	# Port 443 is taken by another service on this host, so HTTPS lives on 8443.
+	# Certificates are obtained via the HTTP-01 challenge on port 80.
+	https_port 8443
+}
+
+{$ECHO_DOMAIN}:8443 {
+	# Webhooks are only for LiveKit on localhost, never from the internet.
+	@internal path /api/livekit/*
+	respond @internal 404
+
+	# LiveKit signaling (WebSocket).
+	@livekit path /rtc /rtc/*
+	reverse_proxy @livekit 127.0.0.1:7880
+
+	reverse_proxy /api/* 127.0.0.1:3000
+
+	respond "Echo server" 200
+}

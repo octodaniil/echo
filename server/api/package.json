@@ -1,0 +1,24 @@
+{
+  "name": "echo-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/index.ts",
+    "dev": "node --disable-warning=ExperimentalWarning --watch --env-file-if-exists=.env src/index.ts",
+    "cli": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env src/cli.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "fastify": "^5.12.8",
+    "livekit-server-sdk": "^2.20.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

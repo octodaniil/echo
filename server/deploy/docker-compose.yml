@@ -1,0 +1,75 @@
+# Echo server stack.
+# All services use host networking: LiveKit needs direct access to the UDP port
+# range anyway, and it keeps routing between the services trivial (127.0.0.1).
+#
+# Ports used on the host:
+#   80    TCP  Caddy  - Let's Encrypt HTTP challenge + redirect   (forwarded on router)
+#   8443  TCP  Caddy  - HTTPS entry point: /api -> api, /rtc -> livekit (forwarded)
+#   7881  TCP  LiveKit - media fallback over TCP                  (forwarded)
+#   50000-50100 UDP LiveKit - media                               (forwarded)
+#   3000  TCP  api     - internal only (127.0.0.1)
+#   7880  TCP  LiveKit - signaling, internal only (behind Caddy)
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.11
+    command: --config /etc/livekit.yaml
+    network_mode: host
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    restart: unless-stopped
+
+  api:
+    build: ../api
+    network_mode: host
+    environment:
+      HOST: 127.0.0.1
+      PORT: 3000
+      DB_PATH: /data/echo.db
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_INTERNAL_URL: http://127.0.0.1:7880
+      LIVEKIT_PUBLIC_URL: wss://${ECHO_DOMAIN}:8443
+    volumes:
+      - echo-data:/data
+    depends_on:
+      - livekit
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    network_mode: host
+    environment:
+      ECHO_DOMAIN: ${ECHO_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - livekit
+    restart: unless-stopped
+
+  # Keeps <subdomain>.duckdns.org pointed at our current public IP.
+  duckdns:
+    image: alpine:3.22
+    environment:
+      DUCKDNS_SUBDOMAIN: ${DUCKDNS_SUBDOMAIN}
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          result=$$(wget -qO- "https://www.duckdns.org/update?domains=$${DUCKDNS_SUBDOMAIN}&token=$${DUCKDNS_TOKEN}&ip=" || echo FAIL)
+          echo "$$(date -Iseconds) duckdns: $$result"
+          sleep 300
+        done
+    restart: unless-stopped
+
+volumes:
+  echo-data:
+  caddy-data:
+  caddy-config:
