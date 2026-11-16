@@ -123,7 +123,11 @@ export function Main({
         };
       });
     }
-    return c.members.map((m) => ({
+    // While we're connected somewhere, a stale server list must not show us in a second channel.
+    const inCallElsewhere = v.status !== 'idle' && v.channelId !== c.id;
+    return c.members
+      .filter((m) => !(inCallElsewhere && m.id === me.id))
+      .map((m) => ({
       id: m.id,
       nickname: m.nickname,
       avatar: m.avatar ?? null,

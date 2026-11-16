@@ -1,5 +1,5 @@
 import type { FastifyBaseLogger, FastifyReply } from 'fastify';
-import type { WebhookEvent } from 'livekit-server-sdk';
+import { ParticipantInfo_State, type WebhookEvent } from 'livekit-server-sdk';
 import { queries, type Channel } from './db.ts';
 import { channelIdFromRoom, roomNameForChannel, roomService, toMember, type ChannelMember } from './livekit.ts';
 
@@ -69,7 +69,13 @@ async function refreshRoom(room: string) {
   if (channelId === null) return;
   try {
     const participants = await roomService.listParticipants(room);
-    members.set(channelId, participants.map(toMember).sort((a, b) => a.joinedAt - b.joinedAt));
+    members.set(
+      channelId,
+      participants
+        .filter((p) => p.state !== ParticipantInfo_State.DISCONNECTED && !justLeft(room, p.identity))
+        .map(toMember)
+        .sort((a, b) => a.joinedAt - b.joinedAt),
+    );
   } catch {
     // Room does not exist (anymore).
     members.delete(channelId);
@@ -94,21 +100,70 @@ export async function resyncAll() {
   }
 }
 
+/**
+ * People who just left a room. LiveKit can still list them for a moment after the
+ * participant_left webhook, so refreshes ignore them for a few seconds — otherwise someone
+ * switching channels shows up in both until the next resync.
+ */
+const recentlyLeft = new Map<string, number>();
+const LEFT_GRACE_MS = 5_000;
+const leftKey = (room: string, identity: string) => `${room}\n${identity}`;
+
+function justLeft(room: string, identity: string): boolean {
+  const until = recentlyLeft.get(leftKey(room, identity));
+  if (until === undefined) return false;
+  if (until < Date.now()) {
+    recentlyLeft.delete(leftKey(room, identity));
+    return false;
+  }
+  return true;
+}
+
+const pendingRefresh = new Map<string, NodeJS.Timeout>();
+
+/** Re-reads a room shortly after the event, to settle whatever LiveKit was still updating. */
+function scheduleRefresh(room: string) {
+  clearTimeout(pendingRefresh.get(room));
+  pendingRefresh.set(
+    room,
+    setTimeout(() => {
+      pendingRefresh.delete(room);
+      void refreshRoom(room).then(broadcastChannels);
+    }, 1_500),
+  );
+}
+
 export async function handleWebhook(event: WebhookEvent) {
   const room = event.room?.name;
   if (!room) return;
+  const channelId = channelIdFromRoom(room);
+  const who = event.participant?.identity;
+
   switch (event.event) {
-    case 'room_finished': {
-      const id = channelIdFromRoom(room);
-      if (id !== null) members.delete(id);
+    case 'room_finished':
+      if (channelId !== null) members.delete(channelId);
       break;
-    }
-    case 'participant_joined':
+
     case 'participant_left':
+      // Apply immediately instead of trusting a listing that may still include them.
+      if (channelId !== null && who) {
+        recentlyLeft.set(leftKey(room, who), Date.now() + LEFT_GRACE_MS);
+        members.set(channelId, (members.get(channelId) ?? []).filter((m) => m.id !== who));
+      }
+      scheduleRefresh(room);
+      break;
+
+    case 'participant_joined':
+      if (who) recentlyLeft.delete(leftKey(room, who));
+      await refreshRoom(room);
+      scheduleRefresh(room);
+      break;
+
     case 'track_published':
     case 'track_unpublished':
       await refreshRoom(room);
       break;
+
     default:
       return;
   }
