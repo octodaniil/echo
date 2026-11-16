@@ -24,6 +24,10 @@ export interface Settings {
   streamQuality: string;
   /** Share sound along with the screen. */
   streamAudio: boolean;
+  /** Stream bitrate in Mbit/s; null = automatic for the chosen quality. */
+  streamBitrate: number | null;
+  /** What to sacrifice when the encoder runs short: 'smooth' keeps fps, 'sharp' keeps resolution. */
+  streamPriority: 'smooth' | 'sharp';
   /** Interface sounds (join/leave/mute/...). */
   uiSounds: boolean;
   /** 0..1 */
@@ -44,6 +48,8 @@ export const defaults: Settings = {
   streamVolumes: {},
   streamQuality: '1080p60',
   streamAudio: true,
+  streamBitrate: null,
+  streamPriority: 'smooth',
   uiSounds: true,
   uiSoundsVolume: 0.6,
 };

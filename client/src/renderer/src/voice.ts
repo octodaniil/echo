@@ -16,7 +16,7 @@ import {
 import { MicPipeline } from './mic';
 import { play } from './sounds';
 import { settings, type Settings } from './settings';
-import { qualityById } from './streamQuality';
+import { streamLabel, streamParams } from './streamQuality';
 
 export type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting';
 
@@ -75,9 +75,15 @@ const initial: VoiceState = {
   error: null,
 };
 
-/** RTP audio level (0..1, linear) above which a remote user counts as speaking. */
-const REMOTE_SPEAKING_LEVEL = 0.015;
+/** Level of received voice (dBFS) above which a remote user counts as speaking. */
+const REMOTE_SPEAKING_DB = -55;
 const SPEAKING_HOLD_MS = 250;
+
+/** Measures the loudness of a received voice track. */
+interface Meter {
+  source: MediaStreamAudioSourceNode;
+  analyser: AnalyserNode;
+}
 
 const isStreamSource = (s: Track.Source) => s === Track.Source.ScreenShare || s === Track.Source.ScreenShareAudio;
 
@@ -94,7 +100,10 @@ class VoiceClient {
   private previewUsers = 0;
   private speakingTimer: number | undefined;
   private remoteSpeakingUntil = new Map<string, number>();
-  private lastPacketTs = new Map<string, number>();
+  /** Analysers on friends' voices; one shared AudioContext only while in a call. */
+  private meterCtx: AudioContext | null = null;
+  private meters = new Map<string, Meter>();
+  private meterBuf = new Float32Array(512);
   private screenStream: MediaStream | null = null;
   private screenPubs: LocalTrackPublication[] = [];
   /** Someone whose stream we want to open as soon as it shows up (double-click from the list). */
@@ -178,6 +187,14 @@ class VoiceClient {
     }
     if (this.room && next.outputDeviceId !== prev.outputDeviceId) {
       await this.room.switchActiveDevice('audiooutput', next.outputDeviceId).catch(() => {});
+    }
+    if (
+      this.state.sharing &&
+      (next.streamQuality !== prev.streamQuality ||
+        next.streamBitrate !== prev.streamBitrate ||
+        next.streamPriority !== prev.streamPriority)
+    ) {
+      await this.applyStreamSettings();
     }
     if (
       next.outputVolume !== prev.outputVolume ||
@@ -265,9 +282,28 @@ class VoiceClient {
     }
   }
 
+  private addMeter(identity: string, track: MediaStreamTrack) {
+    this.removeMeter(identity);
+    this.meterCtx ??= new AudioContext({ latencyHint: 'playback' });
+    const source = this.meterCtx.createMediaStreamSource(new MediaStream([track]));
+    const analyser = this.meterCtx.createAnalyser();
+    analyser.fftSize = 512;
+    // Not connected to the speakers: an analyser is pulled on its own; playback stays LiveKit's.
+    source.connect(analyser);
+    this.meters.set(identity, { source, analyser });
+  }
+
+  private removeMeter(identity: string) {
+    const m = this.meters.get(identity);
+    if (!m) return;
+    m.source.disconnect();
+    this.meters.delete(identity);
+  }
+
   /**
-   * Remote speaking indicator straight from the RTP audio-level header of incoming packets:
-   * no decoding, no server round trip, so it reacts within ~60 ms.
+   * Remote speaking indicator from the voice we actually receive (~60 ms reaction).
+   * The LiveKit server's own active-speaker flag is a fallback.
+   * (RTP audio-level headers looked cheaper, but the server doesn't forward them.)
    */
   private pollRemoteSpeaking() {
     const room = this.room;
@@ -275,16 +311,17 @@ class VoiceClient {
     const now = performance.now();
     for (const p of room.remoteParticipants.values()) {
       const pub = p.getTrackPublication(Track.Source.Microphone);
-      const receiver = (pub?.track as RemoteTrack | undefined)?.receiver;
-      if (!receiver || pub?.isMuted) continue;
-      const src = receiver.getSynchronizationSources()[0];
-      if (!src) continue;
-      // With DTX nothing arrives during silence: only count packets that are new since last poll.
-      const fresh = src.timestamp !== this.lastPacketTs.get(p.identity);
-      this.lastPacketTs.set(p.identity, src.timestamp);
-      if (fresh && (src.audioLevel ?? 0) > REMOTE_SPEAKING_LEVEL) {
-        this.remoteSpeakingUntil.set(p.identity, now + SPEAKING_HOLD_MS);
+      if (!pub || pub.isMuted) continue;
+      let loud = p.isSpeaking;
+      const m = this.meters.get(p.identity);
+      if (m) {
+        m.analyser.getFloatTimeDomainData(this.meterBuf);
+        let sum = 0;
+        for (const v of this.meterBuf) sum += v * v;
+        const db = 10 * Math.log10(sum / this.meterBuf.length + 1e-12);
+        loud ||= db > REMOTE_SPEAKING_DB;
       }
+      if (loud) this.remoteSpeakingUntil.set(p.identity, now + SPEAKING_HOLD_MS);
     }
     this.syncParticipants();
   }
@@ -324,6 +361,7 @@ class VoiceClient {
       })
       .on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
         this.remoteSpeakingUntil.delete(p.identity);
+        this.removeMeter(p.identity);
         void play('userLeave');
         sync();
       })
@@ -345,11 +383,13 @@ class VoiceClient {
           el.dataset.echoAudio = participant.identity;
           document.body.appendChild(el);
           participant.setVolume(this.volumeFor(participant.identity, pub.source), pub.source as Track.Source.Microphone);
+          if (pub.source === Track.Source.Microphone) this.addMeter(participant.identity, track.mediaStreamTrack);
         }
         sync();
       })
-      .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
+      .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, pub: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (track.kind === Track.Kind.Audio) track.detach().forEach((el) => el.remove());
+        if (pub.source === Track.Source.Microphone) this.removeMeter(participant.identity);
         sync();
       })
       .on(RoomEvent.LocalTrackUnpublished, sync)
@@ -425,7 +465,9 @@ class VoiceClient {
     this.micTrack = null;
     this.stopScreenCapture();
     this.remoteSpeakingUntil.clear();
-    this.lastPacketTs.clear();
+    for (const id of [...this.meters.keys()]) this.removeMeter(id);
+    void this.meterCtx?.close();
+    this.meterCtx = null;
     document.querySelectorAll('[data-echo-audio]').forEach((el) => el.remove());
     this.set({ ...initial, micMuted: this.state.micMuted, deafened: this.state.deafened, error });
     await this.releasePipelineIfUnused();
@@ -433,12 +475,12 @@ class VoiceClient {
 
   // ---------- screen sharing ----------
 
-  async startScreenShare(source: { id: string; name: string }, qualityId: string, withAudio: boolean) {
+  async startScreenShare(source: { id: string; name: string }, withAudio: boolean) {
     const room = this.room;
     if (!room || this.state.status !== 'connected') throw new Error('Сначала зайди в голосовой канал');
     if (this.state.sharing) await this.stopScreenShare();
 
-    const q = qualityById(qualityId);
+    const { q, bitrate, degradation, hint } = streamParams(settings.get());
     await window.echo.selectScreenSource(source.id, withAudio);
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { max: q.width }, height: { max: q.height }, frameRate: { ideal: q.fps, max: q.fps } },
@@ -459,8 +501,7 @@ class VoiceClient {
     this.screenStream = stream;
 
     const video = stream.getVideoTracks()[0]!;
-    // Smooth motion for games/video at 60 fps, crisp text at 30.
-    video.contentHint = q.fps >= 60 ? 'motion' : 'detail';
+    video.contentHint = hint;
     // The shared window was closed or the screen went away.
     video.addEventListener('ended', () => void this.stopScreenShare());
 
@@ -474,8 +515,8 @@ class VoiceClient {
           simulcast: false,
           // For screen shares LiveKit reads screenShareEncoding (videoEncoding is ignored and
           // it falls back to its 1080p·15 fps preset — streams looked choppy because of that).
-          screenShareEncoding: { maxBitrate: q.bitrate, maxFramerate: q.fps, priority: 'high' },
-          degradationPreference: q.fps >= 60 ? 'maintain-framerate' : 'maintain-resolution',
+          screenShareEncoding: { maxBitrate: bitrate, maxFramerate: q.fps, priority: 'high' },
+          degradationPreference: degradation,
         }),
       );
       const audio = stream.getAudioTracks()[0];
@@ -494,7 +535,9 @@ class VoiceClient {
       await this.stopScreenShare();
       throw err;
     }
-    this.set({ sharing: { sourceName: source.name, quality: q.label, withAudio: !!stream.getAudioTracks()[0] } });
+    this.set({
+      sharing: { sourceName: source.name, quality: streamLabel(q, bitrate), withAudio: !!stream.getAudioTracks()[0] },
+    });
     void play('streamStart');
     this.syncParticipants();
   }
@@ -510,6 +553,39 @@ class VoiceClient {
     this.stopScreenCapture();
     this.set({ sharing: null });
     this.syncParticipants();
+  }
+
+  /**
+   * Applies changed quality / bitrate / priority to the running stream without restarting it:
+   * capture constraints for resolution and fps, sender parameters for the encoder.
+   */
+  private async applyStreamSettings() {
+    const pub = this.screenPubs.find((x) => x.source === Track.Source.ScreenShare);
+    const track = pub?.track;
+    if (!track || !this.state.sharing) return;
+    const { q, bitrate, degradation, hint } = streamParams(settings.get());
+
+    const mst = track.mediaStreamTrack;
+    mst.contentHint = hint;
+    await mst
+      .applyConstraints({ width: { max: q.width }, height: { max: q.height }, frameRate: { ideal: q.fps, max: q.fps } })
+      .catch((err) => console.warn('[stream] applyConstraints', err));
+
+    const sender = track.sender;
+    if (sender) {
+      const params = sender.getParameters() as RTCRtpSendParameters & { degradationPreference?: RTCDegradationPreference };
+      params.degradationPreference = degradation;
+      for (const e of params.encodings) {
+        e.maxBitrate = bitrate;
+        e.maxFramerate = q.fps;
+      }
+      await sender.setParameters(params).catch((err) => console.warn('[stream] setParameters', err));
+    }
+    // LiveKit keeps its own copy of the encodings (dynacast re-applies them).
+    const own = (track as unknown as { encodings?: RTCRtpEncodingParameters[] }).encodings;
+    if (Array.isArray(own)) for (const e of own) Object.assign(e, { maxBitrate: bitrate, maxFramerate: q.fps });
+
+    this.set({ sharing: { ...this.state.sharing, quality: streamLabel(q, bitrate) } });
   }
 
   private stopScreenCapture() {

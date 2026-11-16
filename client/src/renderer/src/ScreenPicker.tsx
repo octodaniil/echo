@@ -3,7 +3,7 @@ import type { ScreenSource } from '../../shared/types';
 import { CloseIcon } from './icons';
 import { useSettings } from './profile';
 import { settings } from './settings';
-import { STREAM_QUALITIES } from './streamQuality';
+import { StreamOptions } from './StreamOptions';
 import { voice } from './voice';
 
 type Kind = 'window' | 'screen';
@@ -46,7 +46,7 @@ export function ScreenPicker({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      await voice.startScreenShare(chosen, s.streamQuality, s.streamAudio);
+      await voice.startScreenShare(chosen, s.streamAudio);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -96,21 +96,8 @@ export function ScreenPicker({ onClose }: { onClose: () => void }) {
         </div>
 
         <footer class="picker-footer">
+          <StreamOptions />
           <div class="picker-options">
-            <label class="field">
-              <span class="field-label">Качество</span>
-              <div class="chips">
-                {STREAM_QUALITIES.map((q) => (
-                  <button
-                    key={q.id}
-                    class={`chip${s.streamQuality === q.id ? ' active' : ''}`}
-                    onClick={() => settings.update({ streamQuality: q.id })}
-                  >
-                    {q.label}
-                  </button>
-                ))}
-              </div>
-            </label>
             <label class="check">
               <input
                 type="checkbox"

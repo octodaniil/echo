@@ -1298,3 +1298,72 @@ input[type='range'] {
   flex: 1;
   max-width: 320px;
 }
+
+/* ---------- stream options ---------- */
+
+.stream-options {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.stream-options small {
+  font-size: 12px;
+}
+.bitrate-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bitrate-row input[type='range'] {
+  flex: 1;
+}
+.bitrate-row input[type='range']:disabled {
+  opacity: 0.4;
+}
+.segmented {
+  display: inline-flex;
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.segmented button {
+  border: none;
+  background: var(--panel-2);
+  padding: 6px 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.segmented button + button {
+  border-left: 1px solid var(--border);
+}
+.segmented button.active {
+  background: rgba(45, 212, 191, 0.12);
+  color: var(--accent);
+}
+.stream-settings {
+  position: relative;
+}
+.icon-btn.active {
+  background: var(--hover);
+  color: var(--text);
+}
+.stream-settings-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: 440px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.stream-settings-popover .segmented button,
+.stream-settings-popover .chip {
+  background: var(--panel);
+}

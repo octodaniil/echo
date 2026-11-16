@@ -19,6 +19,7 @@ import {
 } from './icons';
 import { useSettings } from './profile';
 import { SettingsView } from './SettingsView';
+import { StreamOptions } from './StreamOptions';
 import { voice, type ConnectionStats, type VoiceState } from './voice';
 
 function useVoice(): VoiceState {
@@ -409,6 +410,7 @@ function VoiceStage({
             Ты транслируешь <b>{state.sharing.sourceName}</b> · {state.sharing.quality}
             {state.sharing.withAudio ? ' · со звуком' : ''}
           </span>
+          <StreamSettingsButton />
           <button class="secondary small" onClick={() => void voice.stopScreenShare()}>
             Остановить
           </button>
@@ -463,6 +465,39 @@ function VoiceStage({
       </div>
 
       {picker && <ScreenPicker onClose={() => setPicker(false)} />}
+    </div>
+  );
+}
+
+/** Change quality / bitrate / priority of the running stream. */
+function StreamSettingsButton() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return (
+    <div class="stream-settings" ref={ref}>
+      <button class={`icon-btn${open ? ' active' : ''}`} title="Настройки трансляции" onClick={() => setOpen(!open)}>
+        <GearIcon size={18} />
+      </button>
+      {open && (
+        <div class="stream-settings-popover">
+          <div class="popover-title">Настройки трансляции</div>
+          <StreamOptions />
+          <small class="muted">Применяется сразу, без перезапуска трансляции.</small>
+        </div>
+      )}
     </div>
   );
 }
