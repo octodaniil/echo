@@ -1,10 +1,11 @@
 import type { JSX } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import type { AchievementDef, Rarity } from '../../shared/types';
+import type { AchievementCategory, AchievementDef, Prestige, Rarity } from '../../shared/types';
 
 // ---------- catalog (loaded once per session) ----------
 
 let catalog: AchievementDef[] | null = null;
+export let categories: AchievementCategory[] = [];
 let loading: Promise<AchievementDef[]> | null = null;
 const listeners = new Set<(c: AchievementDef[]) => void>();
 
@@ -12,10 +13,11 @@ export function loadCatalog(): Promise<AchievementDef[]> {
   if (catalog) return Promise.resolve(catalog);
   loading ??= window.echo
     .getAchievementCatalog()
-    .then((c) => {
-      catalog = c;
-      listeners.forEach((fn) => fn(c));
-      return c;
+    .then((r) => {
+      catalog = r.catalog;
+      categories = r.categories ?? [];
+      listeners.forEach((fn) => fn(r.catalog));
+      return r.catalog;
     })
     .catch(() => {
       loading = null;
@@ -149,3 +151,62 @@ export function PinnedBadges({ codes, size = 22 }: { codes: string[] | undefined
     </span>
   );
 }
+
+// ---------- prestige ----------
+
+export const TIER_NAMES = ['Новичок', 'Бронза', 'Серебро', 'Золото', 'Легенда'];
+
+export const tierOf = (p: Prestige | undefined) => p?.tier ?? 0;
+
+/** Small level chip next to a nickname, colored by rank. */
+export function LevelChip({ prestige }: { prestige: Prestige | undefined }) {
+  if (!prestige || prestige.points <= 0) return null;
+  return (
+    <span class={`lvl lvl-t${prestige.tier}`} title={`${TIER_NAMES[prestige.tier]} · уровень ${prestige.level} · ${prestige.points} очков`}>
+      {prestige.level}
+    </span>
+  );
+}
+
+// ---------- more icons for game achievements ----------
+Object.assign(ICONS, {
+  gamepad: (
+    <>
+      <path d="M6 11h4M8 9v4M15 12h.01M18 10h.01" />
+      <path d="M17.3 5H6.7a4 4 0 0 0-3.95 3.4L2 14.6A3 3 0 0 0 7.2 17l1.3-1.5a2 2 0 0 1 1.5-.7h4a2 2 0 0 1 1.5.7L16.8 17a3 3 0 0 0 5.2-2.4l-.75-6.2A4 4 0 0 0 17.3 5Z" />
+    </>
+  ),
+  joystick: (
+    <>
+      <path d="M21 17a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2Z" />
+      <path d="M12 15V8" />
+      <circle cx="12" cy="5" r="3" />
+    </>
+  ),
+  trophy: (
+    <>
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M6 3h12v6a6 6 0 0 1-12 0Z" />
+      <path d="M10 15v3h4v-3M8 21h8" />
+    </>
+  ),
+  stack: (
+    <>
+      <path d="m12 2 9 5-9 5-9-5Z" />
+      <path d="m3 12 9 5 9-5M3 17l9 5 9-5" />
+    </>
+  ),
+  handshake: (
+    <>
+      <path d="m11 17 2 2a1 1 0 1 0 3-3" />
+      <path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.9-3.9a3 3 0 0 0-4.2 0l-.9.9a1 1 0 1 1-3-3l2.8-2.8a5.8 5.8 0 0 1 7 .9L21 7" />
+      <path d="m21 3 1 11h-2M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3M3 4h8" />
+    </>
+  ),
+  shield: (
+    <>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+      <path d="m9 12 2 2 4-4" />
+    </>
+  ),
+});

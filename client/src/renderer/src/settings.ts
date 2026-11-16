@@ -30,6 +30,12 @@ export interface Settings {
   streamPriority: 'smooth' | 'sharp';
   /** Color theme id (see themes.ts). */
   theme: string;
+  /** Tell friends which game is running. */
+  showGame: boolean;
+  /** User's own games: exe (lower-case) -> name. */
+  customGames: Record<string, string>;
+  /** Closing the window keeps Echo in the tray. */
+  closeToTray: boolean;
   /** Global hotkeys: action -> Electron accelerator. */
   hotkeys: Record<string, string | null>;
   /** Interface sounds (join/leave/mute/...). */
@@ -55,6 +61,9 @@ export const defaults: Settings = {
   streamBitrate: null,
   streamPriority: 'smooth',
   theme: 'neon',
+  showGame: true,
+  customGames: {},
+  closeToTray: true,
   hotkeys: {},
   uiSounds: true,
   uiSoundsVolume: 0.6,

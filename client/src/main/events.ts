@@ -10,6 +10,8 @@ export interface EventHandlers {
   onAchievement(code: string): void;
   /** An admin moved us to another channel. */
   onMove(channelId: number, by: string): void;
+  /** Who is online and what they play. */
+  onPresence(users: unknown[]): void;
 }
 
 /**
@@ -56,6 +58,7 @@ export function startEvents(session: ActiveSession, handlers: EventHandlers): ()
             }
             if (event === 'channels') handlers.onChannels(JSON.parse(data) as Channel[]);
             else if (event === 'achievement') handlers.onAchievement((JSON.parse(data) as { code: string }).code);
+            else if (event === 'presence') handlers.onPresence(JSON.parse(data) as unknown[]);
             else if (event === 'move') {
               const m = JSON.parse(data) as { channelId: number; by: string };
               handlers.onMove(m.channelId, m.by);

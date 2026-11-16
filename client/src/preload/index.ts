@@ -1,10 +1,13 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type {
+  AchievementCategory,
   AchievementDef,
   Channel,
   Invite,
   IpcResult,
+  PresenceUser,
   Profile,
+  UpdateStatus,
   ScreenSource,
   Session,
   SessionEndReason,
@@ -40,12 +43,28 @@ const api = {
   setAvatar: (webp: Uint8Array) => call<Session>('me:set-avatar', webp),
   removeAvatar: () => call<Session>('me:remove-avatar'),
 
-  getAchievementCatalog: () => call<AchievementDef[]>('ach:catalog'),
+  getAchievementCatalog: () =>
+    call<{ catalog: AchievementDef[]; categories?: AchievementCategory[] }>('ach:catalog'),
   getProfile: (userId: string) => call<Profile>('profile:get', userId),
   setPinned: (codes: string[]) => call<string[]>('me:pinned', codes),
   awardAchievement: (userId: string, code: string) => call<unknown>('ach:award', userId, code),
   revokeAchievement: (userId: string, code: string) => call<unknown>('ach:revoke', userId, code),
   onAchievement: (cb: (code: string) => void) => on('achievement', cb),
+
+  getPresence: () => call<PresenceUser[]>('presence:get'),
+  onPresence: (cb: (users: PresenceUser[]) => void) => on('presence', cb),
+
+  setGamesConfig: (cfg: { enabled: boolean; custom: Record<string, string> }) => call<void>('games:config', cfg),
+  getCurrentGame: () => call<string | null>('games:current'),
+  onGame: (cb: (game: string | null) => void) => on('game', cb),
+  listWindowedApps: () => call<{ exe: string; title: string }[]>('games:apps'),
+
+  setTrayState: (state: { micMuted: boolean; deafened: boolean; channel: string | null }) => call<void>('tray:state', state),
+  setCloseToTray: (on: boolean) => call<void>('app:set-close-to-tray', on),
+
+  checkForUpdates: () => call<UpdateStatus>('update:check'),
+  getUpdateStatus: () => call<UpdateStatus>('update:status'),
+  onUpdateStatus: (cb: (s: UpdateStatus) => void) => on('update-status', cb),
 
   moveUser: (channelId: number, userId: string) => call<unknown>('channels:move', channelId, userId),
   onMove: (cb: (m: { channelId: number; by: string }) => void) => on('move', cb),

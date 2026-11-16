@@ -13,8 +13,46 @@ export interface AchievementDef {
   title: string;
   description: string;
   rarity: Rarity;
+  category?: string;
   icon: string;
   manual?: boolean;
+}
+
+/** Rank from achievements: points by rarity -> level and tier (0 none … 4 legend). */
+export interface Prestige {
+  points: number;
+  level: number;
+  tier: 0 | 1 | 2 | 3 | 4;
+  /** Points needed for the next tier (null at the top). */
+  nextTierAt: number | null;
+  tierFloor: number;
+}
+
+export interface Activity {
+  game: string;
+  since: number;
+}
+
+export interface PresenceUser {
+  id: string;
+  nickname: string;
+  avatar: number | null;
+  pinned: string[];
+  activity: Activity | null;
+  prestige?: Prestige;
+}
+
+export type UpdateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'none' }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'ready'; version: string }
+  | { state: 'error'; message: string };
+
+export interface AchievementCategory {
+  id: string;
+  title: string;
 }
 
 export interface Profile extends User {
@@ -22,8 +60,12 @@ export interface Profile extends User {
   lastSeenAt: number | null;
   voiceSeconds: number;
   streamsCount: number;
+  gameSeconds: number;
+  gamesCount: number;
+  topGames: { game: string; seconds: number }[];
   achievements: { code: string; awardedAt: number }[];
   pinned: string[];
+  prestige: Prestige;
 }
 
 export interface ChannelMember {
@@ -32,6 +74,7 @@ export interface ChannelMember {
   avatar: number | null;
   /** Achievement codes the user shows off. */
   pinned?: string[];
+  prestige?: Prestige;
   streaming: boolean;
   joinedAt: number;
 }

@@ -1,6 +1,6 @@
 import type { JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Session } from '../../shared/types';
+import type { Session, UpdateStatus } from '../../shared/types';
 import { Avatar } from './Avatar';
 import { CloseIcon } from './icons';
 import type { MicPipeline } from './mic';
@@ -19,7 +19,7 @@ import {
 } from './hotkeys';
 import { voice } from './voice';
 
-type Tab = 'voice' | 'hotkeys' | 'account' | 'app';
+type Tab = 'voice' | 'hotkeys' | 'games' | 'account' | 'app';
 
 export function SettingsView({
   session,
@@ -51,6 +51,9 @@ export function SettingsView({
         <NavItem active={tab === 'hotkeys'} onClick={() => setTab('hotkeys')}>
           Горячие клавиши
         </NavItem>
+        <NavItem active={tab === 'games'} onClick={() => setTab('games')}>
+          Игры
+        </NavItem>
         <NavItem active={tab === 'app'} onClick={() => setTab('app')}>
           Приложение
         </NavItem>
@@ -59,6 +62,7 @@ export function SettingsView({
         {tab === 'voice' && <VoiceTab />}
         {tab === 'account' && <AccountTab session={session} onSession={onSession} />}
         {tab === 'hotkeys' && <HotkeysTab />}
+        {tab === 'games' && <GamesTab />}
         {tab === 'app' && <AppTab session={session} />}
       </section>
       <button class="settings-close" title="Закрыть (Esc)" onClick={onClose}>
@@ -404,7 +408,7 @@ function AccountTab({ session, onSession }: { session: Session; onSession: (s: S
 // ---------------------------------------------------------------- app
 
 function AppTab({ session }: { session: Session }) {
-  const { theme } = useSettings();
+  const { theme, closeToTray } = useSettings();
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [version, setVersion] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -454,7 +458,17 @@ function AppTab({ session }: { session: Session }) {
           }
         />
       </label>
+      <label class="switch-row">
+        <span>
+          Сворачивать в трей при закрытии
+          <small>Крестик прячет окно, Echo остаётся в сети и в голосе. Выйти — через значок в трее</small>
+        </span>
+        <Toggle checked={closeToTray} onChange={(v) => settings.update({ closeToTray: v })} />
+      </label>
       {error && <div class="error">{error}</div>}
+
+      <h3>Обновления</h3>
+      <UpdatePanel version={version} />
 
       <h3>О программе</h3>
       <dl class="about">
@@ -463,6 +477,157 @@ function AppTab({ session }: { session: Session }) {
         <dt>Сервер</dt>
         <dd>{session.serverUrl.replace(/^https:\/\//, '')}</dd>
       </dl>
+    </div>
+  );
+}
+
+function UpdatePanel({ version }: { version: string }) {
+  const [st, setSt] = useState<UpdateStatus>({ state: 'idle' });
+  useEffect(() => {
+    void window.echo.getUpdateStatus().then(setSt);
+    return window.echo.onUpdateStatus(setSt);
+  }, []);
+
+  const busy = st.state === 'checking' || st.state === 'downloading';
+  return (
+    <div class="update-panel">
+      <div class="update-panel-text">
+        {st.state === 'idle' && <span>Установлена версия {version}</span>}
+        {st.state === 'checking' && <span>Проверяем…</span>}
+        {st.state === 'none' && <span class="ok">У тебя последняя версия ({version})</span>}
+        {st.state === 'downloading' && (
+          <>
+            <span>
+              Скачиваем {st.version} — {st.percent}%
+            </span>
+            <div class="rank-bar">
+              <span style={{ width: `${st.percent}%` }} />
+            </div>
+          </>
+        )}
+        {st.state === 'ready' && <span class="ok">Версия {st.version} скачана и готова</span>}
+        {st.state === 'error' && <span class="err">{st.message}</span>}
+      </div>
+      {st.state === 'ready' ? (
+        <button class="primary small" onClick={() => void voice.leave().then(() => window.echo.installUpdate())}>
+          Перезапустить и обновить
+        </button>
+      ) : (
+        <button class="secondary" disabled={busy} onClick={() => void window.echo.checkForUpdates().then(setSt)}>
+          {busy ? 'Подождите…' : 'Проверить обновления'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- games
+
+function GamesTab() {
+  const s = useSettings();
+  const [current, setCurrent] = useState<string | null>(null);
+  const [apps, setApps] = useState<{ exe: string; title: string }[] | null>(null);
+  const [loadingApps, setLoadingApps] = useState(false);
+  const [naming, setNaming] = useState<{ exe: string; name: string } | null>(null);
+
+  useEffect(() => {
+    void window.echo.getCurrentGame().then(setCurrent);
+    return window.echo.onGame(setCurrent);
+  }, []);
+
+  const loadApps = async () => {
+    setLoadingApps(true);
+    setApps(await window.echo.listWindowedApps().catch(() => []));
+    setLoadingApps(false);
+  };
+
+  const custom = Object.entries(s.customGames);
+  return (
+    <div class="settings-page">
+      <h2>Игры</h2>
+      <label class="switch-row">
+        <span>
+          Показывать, во что я играю
+          <small>Друзья увидят «🎮 играет в …» у тебя в профиле и в списке. Время в играх идёт в ачивки</small>
+        </span>
+        <Toggle checked={s.showGame} onChange={(v) => settings.update({ showGame: v })} />
+      </label>
+
+      <div class="now-playing settings-now">
+        <span class={`now-playing-dot${current ? '' : ' off'}`} />
+        {!s.showGame ? 'Определение игр выключено' : current ? <>Сейчас: <b>{current}</b></> : 'Сейчас игра не запущена'}
+      </div>
+      <small class="muted">
+        Echo раз в 15 секунд смотрит запущенные программы и сравнивает со списком из ~170 популярных игр. Нет твоей —
+        добавь ниже.
+      </small>
+
+      <h3>Свои игры</h3>
+      {custom.length === 0 && <small class="muted">Пока пусто.</small>}
+      <div class="custom-games">
+        {custom.map(([exe, name]) => (
+          <div key={exe} class="custom-game">
+            <span class="custom-game-name">{name}</span>
+            <span class="muted mono tiny">{exe}</span>
+            <button
+              class="icon-btn"
+              title="Убрать"
+              onClick={() => {
+                const next = { ...s.customGames };
+                delete next[exe];
+                settings.update({ customGames: next });
+              }}
+            >
+              <CloseIcon size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {naming ? (
+        <form
+          class="row nick-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!naming.name.trim()) return;
+            settings.update({ customGames: { ...s.customGames, [naming.exe]: naming.name.trim() } });
+            setNaming(null);
+            setApps(null);
+          }}
+        >
+          <label class="field">
+            <span class="field-label">Как назвать игру ({naming.exe})</span>
+            <input
+              value={naming.name}
+              maxLength={64}
+              autoFocus
+              onInput={(e) => setNaming({ ...naming, name: e.currentTarget.value })}
+            />
+          </label>
+          <button class="primary small" type="submit">
+            Добавить
+          </button>
+          <button class="secondary" type="button" onClick={() => setNaming(null)}>
+            Отмена
+          </button>
+        </form>
+      ) : (
+        <button class="secondary" style={{ alignSelf: 'flex-start' }} disabled={loadingApps} onClick={() => void loadApps()}>
+          {loadingApps ? 'Ищем окна…' : 'Добавить игру из запущенных'}
+        </button>
+      )}
+
+      {apps && !naming && (
+        <div class="app-picker">
+          {apps.length === 0 && <small class="muted">Не нашли открытых окон. Запусти игру и нажми ещё раз.</small>}
+          {apps.map((a) => (
+            <button key={a.exe + a.title} class="app-pick" onClick={() => setNaming({ exe: a.exe, name: a.title })}>
+              <span class="app-pick-title">{a.title}</span>
+              <span class="muted mono tiny">{a.exe}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

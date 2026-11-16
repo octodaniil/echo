@@ -1,7 +1,7 @@
 {
   "name": "echo-client",
   "productName": "Echo",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Echo — голосовой чат для своих",
   "author": "octodaniil",
@@ -72,6 +72,12 @@
       "owner": "octodaniil",
       "repo": "echo",
       "releaseType": "release"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ]
   }
 }

@@ -14,8 +14,10 @@ import type {
 import { authed, request } from './api';
 import { startEvents } from './events';
 import { clearSession, loadSession, normalizeServerUrl, saveSession, type ActiveSession } from './session';
+import { listWindowedApps, startGameWatcher, type GamesConfig } from './games';
 import { installDisplayMediaHandler, listSources, selectSource } from './screen';
-import { installUpdateNow, startUpdater, type UpdateInfo } from './updater';
+import { createTray, type TrayState } from './tray';
+import { checkNow, installUpdateNow, startUpdater, updateStatus, type UpdateInfo } from './updater';
 
 // Voice must keep playing without a click first.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -34,6 +36,28 @@ let stopEvents: (() => void) | null = null;
 let channels: Channel[] = [];
 let serverOnline = false;
 let readyUpdate: UpdateInfo | null = null;
+let presence: unknown[] = [];
+let gamesConfig: GamesConfig = { enabled: true, custom: {} };
+let closeToTray = true;
+/** Set when the user really wants to quit (tray menu, update), not just close the window. */
+let quitting = false;
+let tray: ReturnType<typeof createTray> | null = null;
+// Started with Windows: stay in the tray until clicked.
+const startHidden = process.argv.includes('--hidden');
+
+const games = startGameWatcher(
+  () => gamesConfig,
+  (game) => {
+    send('game', game);
+    void reportGame(game);
+  },
+);
+
+/** Tell the server what we play (it shows it to friends and counts game achievements). */
+async function reportGame(game: string | null) {
+  if (!current) return;
+  await authed(current, '/api/me/activity', { method: 'PUT', body: { game } }).catch(() => {});
+}
 
 function send(channel: string, payload?: unknown) {
   win?.webContents.send(channel, payload);
@@ -50,6 +74,12 @@ function beginSession(s: ActiveSession) {
     onConnectionChange(online) {
       serverOnline = online;
       send('server-status', online);
+      // The server keeps "playing X" in memory only: tell it again after a reconnect.
+      if (online && games.current) void reportGame(games.current);
+    },
+    onPresence(users) {
+      presence = users;
+      send('presence', users);
     },
     onUnauthorized(reason) {
       void endSession(reason);
@@ -68,6 +98,7 @@ async function endSession(reason: SessionEndReason) {
   stopEvents = null;
   current = null;
   channels = [];
+  presence = [];
   serverOnline = false;
   await clearSession();
   send('session-ended', reason);
@@ -114,6 +145,30 @@ function registerIpc() {
   handle('auth:logout', () => endSession('logout'));
 
   handle('channels:get', () => ({ channels, online: serverOnline }));
+  handle('presence:get', () => presence);
+
+  // ---------- games ----------
+
+  handle('games:config', (cfg: GamesConfig) => {
+    const was = gamesConfig.enabled;
+    gamesConfig = cfg;
+    games.refresh();
+    if (was && !cfg.enabled) void reportGame(null);
+  });
+  handle('games:current', () => games.current);
+  handle('games:apps', () => listWindowedApps());
+
+  // ---------- tray & window ----------
+
+  handle('tray:state', (state: TrayState) => tray?.update(state));
+  handle('app:set-close-to-tray', (on: boolean) => {
+    closeToTray = on;
+  });
+
+  // ---------- updates ----------
+
+  handle('update:check', () => checkNow());
+  handle('update:status', () => updateStatus());
 
   // "Check now" on the server-down screen: reconnect immediately instead of waiting for backoff.
   handle('events:retry', () => {
@@ -163,7 +218,9 @@ function registerIpc() {
 
   // ---------- achievements & profiles ----------
 
-  handle('ach:catalog', async () => (await authed<{ catalog: AchievementDef[] }>(requireSession(), '/api/achievements')).catalog);
+  handle('ach:catalog', () =>
+    authed<{ catalog: AchievementDef[]; categories?: { id: string; title: string }[] }>(requireSession(), '/api/achievements'),
+  );
   handle('profile:get', async (id: string) =>
     (await authed<{ profile: Profile }>(requireSession(), `/api/users/${encodeURIComponent(id)}/profile`)).profile,
   );
@@ -212,7 +269,8 @@ function registerIpc() {
   handle('app:get-autostart', () => app.isPackaged && app.getLoginItemSettings().openAtLogin);
   handle('app:set-autostart', (enabled: boolean) => {
     if (!app.isPackaged) throw new Error('Автозапуск работает только в установленной версии');
-    app.setLoginItemSettings({ openAtLogin: enabled });
+    // --hidden: start in the tray instead of popping the window up at login.
+    app.setLoginItemSettings({ openAtLogin: enabled, args: ['--hidden'] });
     return enabled;
   });
 
@@ -253,7 +311,13 @@ function createWindow() {
     },
   });
 
-  win.once('ready-to-show', () => win?.show());
+  win.once('ready-to-show', () => !startHidden && win?.show());
+  // Closing the window keeps Echo in the tray (voice keeps working), unless quitting.
+  win.on('close', (e) => {
+    if (quitting || !closeToTray || !tray) return;
+    e.preventDefault();
+    win?.hide();
+  });
   win.on('closed', () => {
     win = null;
     // Pop-out stream windows can't live without the main window.
@@ -293,10 +357,16 @@ function createWindow() {
   else void win.loadFile(join(__dirname, '../renderer/index.html'));
 }
 
-app.on('second-instance', () => {
+function showWindow() {
   if (!win) return;
   if (win.isMinimized()) win.restore();
+  win.show();
   win.focus();
+}
+
+app.on('second-instance', showWindow);
+app.on('before-quit', () => {
+  quitting = true;
 });
 
 app.whenReady().then(() => {
@@ -312,10 +382,21 @@ app.whenReady().then(() => {
   const saved = loadSession();
   if (saved) beginSession(saved);
   createWindow();
-  startUpdater((info) => {
-    readyUpdate = info;
-    send('update-ready', info);
-  });
+  startUpdater(
+    (info) => {
+      readyUpdate = info;
+      send('update-ready', info);
+    },
+    (status) => send('update-status', status),
+  );
+  tray = createTray(
+    showWindow,
+    (action) => send('hotkey', action),
+    () => {
+      quitting = true;
+      app.quit();
+    },
+  );
 });
 
 app.setAppUserModelId('io.github.octodaniil.echo');

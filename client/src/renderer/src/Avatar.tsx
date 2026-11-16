@@ -8,37 +8,53 @@ function hue(id: string) {
   return h;
 }
 
+/**
+ * Avatar with an optional rank ring (tier 1 bronze … 4 legend). The ring is a static
+ * gradient behind the picture: no animation, so it costs nothing after the first paint.
+ */
 export function Avatar({
   id,
   name,
   avatar,
   size = 32,
   speaking = false,
+  tier = 0,
 }: {
   id: string;
   name: string;
   avatar?: number | null;
   size?: number;
   speaking?: boolean;
+  tier?: number;
 }) {
   const url = avatarUrl(id, avatar);
   const [broken, setBroken] = useState<string | null>(null);
   const showImage = url && broken !== url;
   return (
     <span
-      class={`avatar${speaking ? ' speaking' : ''}`}
-      style={{
-        width: size,
-        height: size,
-        fontSize: size * 0.42,
-        background: showImage ? 'var(--panel-2)' : `hsl(${hue(id)} 45% 42%)`,
-      }}
+      class={`avatar-wrap tier-${tier}`}
+      style={{ width: size, height: size, '--ring': `${Math.max(2, Math.round(size * 0.055))}px` }}
     >
-      {showImage ? (
-        <img src={url} alt="" draggable={false} onError={() => setBroken(url)} />
-      ) : (
-        name.trim().charAt(0).toUpperCase() || '?'
-      )}
+      <span
+        class={`avatar${speaking ? ' speaking' : ''}`}
+        style={{
+          width: size,
+          height: size,
+          fontSize: size * 0.42,
+          background: showImage ? 'var(--panel-2)' : `hsl(${hue(id)} 45% 42%)`,
+        }}
+      >
+        {showImage ? (
+          <img src={url} alt="" draggable={false} onError={() => setBroken(url)} />
+        ) : (
+          name.trim().charAt(0).toUpperCase() || '?'
+        )}
+      </span>
     </span>
   );
+}
+
+/** Nickname colored by rank. */
+export function Nick({ name, tier = 0, class: cls = '' }: { name: string; tier?: number; class?: string }) {
+  return <span class={`nick-t${tier} ${cls}`.trim()}>{name}</span>;
 }

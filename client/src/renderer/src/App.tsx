@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
-import type { Channel, Session, SessionEndReason } from '../../shared/types';
+import type { Channel, PresenceUser, Session, SessionEndReason } from '../../shared/types';
+import { installAppSync } from './appSync';
 import { Login } from './Login';
 import { setServerUrl } from './profile';
 import { ServerDown } from './ServerDown';
@@ -15,6 +16,7 @@ const endNotice: Record<SessionEndReason, string | null> = {
 export function App() {
   const [session, setSessionState] = useState<Session | null | undefined>(undefined);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [presence, setPresence] = useState<PresenceUser[]>([]);
   const [online, setOnline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   // Show the "server is off" screen only after a few seconds offline (not on brief blips or startup).
@@ -34,18 +36,22 @@ export function App() {
   };
 
   useEffect(() => {
+    installAppSync();
     void window.echo.getSession().then(setSession);
+    void window.echo.getPresence().then(setPresence);
     void window.echo.getChannels().then((r) => {
       setChannels(r.channels);
       setOnline(r.online);
     });
     const offs = [
       window.echo.onChannels(setChannels),
+      window.echo.onPresence(setPresence),
       window.echo.onServerStatus(setOnline),
       window.echo.onSessionEnded((reason) => {
         void voice.leave();
         setSession(null);
         setChannels([]);
+        setPresence([]);
         setNotice(endNotice[reason]);
       }),
     ];
@@ -66,7 +72,7 @@ export function App() {
   }
   return (
     <>
-      <Main session={session} channels={channels} online={online} onSession={setSession} />
+      <Main session={session} channels={channels} presence={presence} online={online} onSession={setSession} />
       {serverDown && <ServerDown serverUrl={session.serverUrl} />}
     </>
   );

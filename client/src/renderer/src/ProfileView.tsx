@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'preact/hooks';
-import type { AchievementDef, Profile, Rarity } from '../../shared/types';
-import { Badge, RARITY_LABEL, useCatalog } from './Achievements';
-import { Avatar } from './Avatar';
+import type { AchievementDef, Activity, Profile, Rarity } from '../../shared/types';
+import { Badge, categories, RARITY_LABEL, TIER_NAMES, useCatalog } from './Achievements';
+import { Avatar, Nick } from './Avatar';
 import { CloseIcon } from './icons';
 
 const RARITY_ORDER: Rarity[] = ['legendary', 'epic', 'rare', 'common'];
 const MAX_PINNED = 3;
 
-function formatVoice(secs: number): string {
+function hours(secs: number): string {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   return h > 0 ? `${h} ч ${m} мин` : `${m} мин`;
@@ -19,11 +19,14 @@ export function ProfileView({
   userId,
   meId,
   amAdmin,
+  activity,
   onClose,
 }: {
   userId: string;
   meId: string;
   amAdmin: boolean;
+  /** What they're playing right now (from presence). */
+  activity: Activity | null;
   onClose: () => void;
 }) {
   const catalog = useCatalog();
@@ -54,12 +57,18 @@ export function ProfileView({
   const pinned = profile?.pinned ?? [];
   const byCode = (c: string) => catalog.find((a) => a.code === c);
   const pinnedDefs = pinned.map(byCode).filter((a): a is AchievementDef => !!a);
-  const top = pinnedDefs[0] ?? [...catalog].sort((a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity)).find((a) => owned.has(a.code));
-  const sorted = [...catalog].sort(
-    (a, b) =>
-      Number(owned.has(b.code)) - Number(owned.has(a.code)) ||
-      RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity),
-  );
+  const tier = profile?.prestige.tier ?? 0;
+
+  const sortInGroup = (list: AchievementDef[]) =>
+    [...list].sort(
+      (a, b) =>
+        Number(owned.has(b.code)) - Number(owned.has(a.code)) ||
+        RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity),
+    );
+  const groups = (categories.length ? categories : [{ id: 'all', title: 'Ачивки' }]).map((c) => ({
+    ...c,
+    items: sortInGroup(catalog.filter((a) => c.id === 'all' || a.category === c.id)),
+  }));
 
   const togglePin = async (code: string) => {
     if (!isMe || !owned.has(code) || !profile) return;
@@ -82,9 +91,12 @@ export function ProfileView({
     }
   };
 
+  const p = profile?.prestige;
+  const progress = p && p.nextTierAt ? (p.points - p.tierFloor) / (p.nextTierAt - p.tierFloor) : 1;
+
   return (
     <div class="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div class={`modal profile r-${top?.rarity ?? 'none'}`}>
+      <div class={`modal profile tier-${tier}`}>
         <div class="profile-banner">
           <button class="icon-btn profile-close" title="Закрыть" onClick={onClose}>
             <CloseIcon size={18} />
@@ -97,13 +109,17 @@ export function ProfileView({
           <>
             <header class="profile-head">
               <span class="profile-avatar">
-                <Avatar id={profile.id} name={profile.nickname} avatar={profile.avatar} size={96} />
+                <Avatar id={profile.id} name={profile.nickname} avatar={profile.avatar} size={96} tier={tier} />
               </span>
               <div class="profile-id">
-                <h2>{profile.nickname}</h2>
+                <h2>
+                  <Nick name={profile.nickname} tier={tier} />
+                </h2>
                 <div class="profile-chips">
                   {profile.isAdmin && <span class="chip-static admin">Админ</span>}
-                  <span class="chip-static">{owned.size} / {catalog.length} ачивок</span>
+                  <span class="chip-static">
+                    {owned.size} / {catalog.length} ачивок
+                  </span>
                 </div>
               </div>
               {pinnedDefs.length > 0 && (
@@ -118,10 +134,40 @@ export function ProfileView({
               )}
             </header>
 
-            <div class="profile-stats">
+            {p && (
+              <div class={`rank-card rank-t${p.tier}`}>
+                <div class="rank-level mono">{p.level}</div>
+                <div class="rank-body">
+                  <div class="rank-title">
+                    {TIER_NAMES[p.tier]} <span class="muted mono">· {p.points} очков</span>
+                  </div>
+                  <div class="rank-bar">
+                    <span style={{ width: `${Math.round(Math.min(1, progress) * 100)}%` }} />
+                  </div>
+                  <div class="muted tiny">
+                    {p.nextTierAt
+                      ? `До ранга «${TIER_NAMES[p.tier + 1]}» — ${p.nextTierAt - p.points} очков`
+                      : 'Высший ранг'}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activity && (
+              <div class="now-playing">
+                <span class="now-playing-dot" />
+                Сейчас играет в <b>{activity.game}</b>
+              </div>
+            )}
+
+            <div class="profile-stats four">
               <div class="stat">
-                <span class="stat-value mono">{formatVoice(profile.voiceSeconds)}</span>
+                <span class="stat-value mono">{hours(profile.voiceSeconds)}</span>
                 <span class="stat-label">в голосе</span>
+              </div>
+              <div class="stat">
+                <span class="stat-value mono">{hours(profile.gameSeconds ?? 0)}</span>
+                <span class="stat-label">в играх</span>
               </div>
               <div class="stat">
                 <span class="stat-value mono">{profile.streamsCount}</span>
@@ -133,6 +179,21 @@ export function ProfileView({
               </div>
             </div>
 
+            {(profile.topGames?.length ?? 0) > 0 && (
+              <section class="profile-section">
+                <h3>Любимые игры</h3>
+                <div class="top-games">
+                  {profile.topGames.map((g, i) => (
+                    <div key={g.game} class="top-game">
+                      <span class="top-game-rank mono">#{i + 1}</span>
+                      <span class="top-game-name">{g.game}</span>
+                      <span class="muted mono tiny">{hours(g.seconds)}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <section class="profile-section">
               <div class="profile-section-head">
                 <h3>Ачивки</h3>
@@ -143,33 +204,45 @@ export function ProfileView({
                   </button>
                 )}
               </div>
-              <div class="ach-grid">
-                {sorted.map((d) => {
-                  const has = owned.has(d.code);
-                  const isPinned = pinned.includes(d.code);
-                  const clickable = manage || (isMe && has);
-                  return (
-                    <button
-                      key={d.code}
-                      class={`ach${has ? '' : ' locked'}${isPinned ? ' pinned' : ''}${clickable ? ' clickable' : ''}${manage ? ' manage' : ''}`}
-                      onClick={() => (manage ? void toggleAward(d.code) : void togglePin(d.code))}
-                      disabled={!clickable}
-                    >
-                      <Badge def={d} size={44} locked={!has} title="" />
-                      <span class="ach-text">
-                        <span class="ach-title">{has || manage ? d.title : '???'}</span>
-                        <span class="ach-desc">{d.description}</span>
-                        <span class={`ach-meta r-${d.rarity}`}>
-                          {RARITY_LABEL[d.rarity]}
-                          {has && ` · ${new Date(owned.get(d.code)!).toLocaleDateString('ru-RU')}`}
-                          {isPinned && ' · закреплена'}
-                          {manage && (has ? ' · забрать' : ' · выдать')}
-                        </span>
+              {groups
+                .filter((g) => g.items.length > 0)
+                .map((g) => (
+                  <div key={g.id} class="ach-group">
+                    <div class="ach-group-title">
+                      {g.title}
+                      <span class="muted mono">
+                        {g.items.filter((a) => owned.has(a.code)).length}/{g.items.length}
                       </span>
-                    </button>
-                  );
-                })}
-              </div>
+                    </div>
+                    <div class="ach-grid">
+                      {g.items.map((d) => {
+                        const has = owned.has(d.code);
+                        const isPinned = pinned.includes(d.code);
+                        const clickable = manage || (isMe && has);
+                        return (
+                          <button
+                            key={d.code}
+                            class={`ach r-${d.rarity}${has ? '' : ' locked'}${isPinned ? ' pinned' : ''}${clickable ? ' clickable' : ''}${manage ? ' manage' : ''}`}
+                            onClick={() => (manage ? void toggleAward(d.code) : void togglePin(d.code))}
+                            disabled={!clickable}
+                          >
+                            <Badge def={d} size={44} locked={!has} title="" />
+                            <span class="ach-text">
+                              <span class="ach-title">{has || manage ? d.title : '???'}</span>
+                              <span class="ach-desc">{d.description}</span>
+                              <span class={`ach-meta r-${d.rarity}`}>
+                                {RARITY_LABEL[d.rarity]}
+                                {has && ` · ${new Date(owned.get(d.code)!).toLocaleDateString('ru-RU')}`}
+                                {isPinned && ' · закреплена'}
+                                {manage && (has ? ' · забрать' : ' · выдать')}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               {error && <div class="error">{error}</div>}
             </section>
           </>
