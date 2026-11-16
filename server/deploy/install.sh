@@ -21,6 +21,8 @@ fi
 if [[ ! -f .env ]]; then
   cp .env.example .env
   chmod 600 .env
+  # Keep it editable by the user who ran sudo (still private to them).
+  if [[ -n "${SUDO_USER:-}" ]]; then chown "$SUDO_USER": .env; fi
   sed -i "s/^LIVEKIT_API_SECRET=.*/LIVEKIT_API_SECRET=$(openssl rand -hex 32)/" .env
   echo ">> Created .env with a fresh LiveKit secret."
 fi
