@@ -86,5 +86,10 @@ export async function requireAdmin(req: FastifyRequest): Promise<void> {
 }
 
 export function publicUser(user: User) {
-  return { id: user.id, nickname: user.nickname, isAdmin: Boolean(user.is_admin) };
+  return {
+    id: user.id,
+    nickname: user.nickname,
+    isAdmin: Boolean(user.is_admin),
+    avatar: user.avatar_version ?? null,
+  };
 }

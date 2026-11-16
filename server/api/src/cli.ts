@@ -1,7 +1,9 @@
 // Admin CLI. Run via server/deploy/admin.sh on the server.
 import { parseArgs } from 'node:util';
 import { createInvite } from './auth.ts';
-import { queries, type Channel, type Invite, type User } from './db.ts';
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { avatarDir, queries, type Channel, type Invite, type User } from './db.ts';
 import { roomService } from './livekit.ts';
 
 const [command, ...rest] = process.argv.slice(2);
@@ -59,6 +61,7 @@ switch (command) {
       process.exit(1);
     }
     queries.deleteUser.run(user.id);
+    rmSync(join(avatarDir, `${user.id}.webp`), { force: true });
     // Drop them from any voice channel they are sitting in right now.
     const rooms = await roomService.listRooms().catch(() => []);
     await Promise.all(rooms.map((r) => roomService.removeParticipant(r.name, user.id).catch(() => {})));

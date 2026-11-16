@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.ts';
 
@@ -9,6 +9,8 @@ export interface User {
   is_admin: number;
   created_at: number;
   last_seen_at: number | null;
+  /** Timestamp of the last avatar upload, used as a cache-busting version; null = no avatar. */
+  avatar_version: number | null;
 }
 
 export interface Invite {
@@ -63,6 +65,15 @@ db.exec(`
   );
 `);
 
+// Migrations for databases created by older versions.
+const userColumns = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+if (!userColumns.some((c) => c.name === 'avatar_version')) {
+  db.exec('ALTER TABLE users ADD COLUMN avatar_version INTEGER');
+}
+
+export const avatarDir = join(dirname(config.dbPath), 'avatars');
+mkdirSync(avatarDir, { recursive: true });
+
 // Seed a couple of channels on first start.
 const channelCount = db.prepare('SELECT COUNT(*) AS n FROM channels').get() as { n: number };
 if (channelCount.n === 0) {
@@ -85,19 +96,25 @@ export function transaction<T>(fn: () => T): T {
 
 export const queries = {
   userByTokenHash: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at FROM users WHERE token_hash = ?',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version FROM users WHERE token_hash = ?',
   ),
   userByNickname: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at FROM users WHERE nickname = ? COLLATE NOCASE',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version FROM users WHERE nickname = ? COLLATE NOCASE',
   ),
   listUsers: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at FROM users ORDER BY created_at',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version FROM users ORDER BY created_at',
   ),
   insertUser: db.prepare(
     'INSERT INTO users (id, nickname, is_admin, token_hash, created_at) VALUES (?, ?, ?, ?, ?)',
   ),
   deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
   touchUser: db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?'),
+  renameUser: db.prepare('UPDATE users SET nickname = ? WHERE id = ?'),
+  setAvatarVersion: db.prepare('UPDATE users SET avatar_version = ? WHERE id = ?'),
+  userProfiles: db.prepare('SELECT id, nickname, avatar_version FROM users'),
+  userById: db.prepare(
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version FROM users WHERE id = ?',
+  ),
 
   inviteByCode: db.prepare('SELECT * FROM invites WHERE code = ?'),
   listInvites: db.prepare('SELECT * FROM invites ORDER BY created_at DESC'),

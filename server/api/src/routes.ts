@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
+import { readFile, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { createInvite, HttpError, publicUser, redeemInvite, requireAdmin, requireUser } from './auth.ts';
 import { config } from './config.ts';
-import { queries, type Channel, type User } from './db.ts';
+import { avatarDir, queries, type Channel, type User } from './db.ts';
 import { createJoinToken, roomNameForChannel, webhookReceiver } from './livekit.ts';
 import {
   broadcastChannels,
@@ -30,6 +32,8 @@ const nickname = z
 const channelName = z.string().trim().min(1, 'Пустое название').max(48, 'Название слишком длинное');
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 
+const avatarPath = (userId: string) => join(avatarDir, `${userId}.webp`);
+
 function getChannel(id: number): Channel {
   const channel = queries.channelById.get(id) as Channel | undefined;
   if (!channel) throw new HttpError(404, 'Канал не найден');
@@ -49,6 +53,58 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/me', { preHandler: requireUser }, async (req) => ({ user: publicUser(req.user) }));
+
+  app.patch('/api/me', { preHandler: requireUser }, async (req) => {
+    const body = parse(z.object({ nickname }), req.body);
+    const taken = queries.userByNickname.get(body.nickname) as User | undefined;
+    if (taken && taken.id !== req.user.id) throw new HttpError(409, 'Этот ник уже занят');
+    queries.renameUser.run(body.nickname, req.user.id);
+    broadcastChannels();
+    return { user: publicUser(queries.userById.get(req.user.id) as unknown as User) };
+  });
+
+  // ---------- avatars ----------
+
+  // Clients send a ready 128x128 WebP; we only check it really is one.
+  app.addContentTypeParser('image/webp', { parseAs: 'buffer', bodyLimit: 512 * 1024 }, (_req, body, done) =>
+    done(null, body),
+  );
+
+  app.put('/api/me/avatar', { preHandler: requireUser }, async (req) => {
+    const data = req.body as Buffer;
+    const isWebp =
+      Buffer.isBuffer(data) &&
+      data.length > 12 &&
+      data.toString('ascii', 0, 4) === 'RIFF' &&
+      data.toString('ascii', 8, 12) === 'WEBP';
+    if (!isWebp) throw new HttpError(400, 'Нужна картинка в формате WebP');
+    await writeFile(avatarPath(req.user.id), data);
+    queries.setAvatarVersion.run(Date.now(), req.user.id);
+    broadcastChannels();
+    return { user: publicUser(queries.userById.get(req.user.id) as unknown as User) };
+  });
+
+  app.delete('/api/me/avatar', { preHandler: requireUser }, async (req) => {
+    await rm(avatarPath(req.user.id), { force: true });
+    queries.setAvatarVersion.run(null, req.user.id);
+    broadcastChannels();
+    return { user: publicUser(queries.userById.get(req.user.id) as unknown as User) };
+  });
+
+  // Public on purpose: <img> tags can't send auth headers, ids are random UUIDs,
+  // and URLs carry ?v=<version> so they can be cached forever.
+  app.get('/api/avatars/:id', async (req, reply) => {
+    const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
+    try {
+      const data = await readFile(avatarPath(id));
+      return reply
+        .header('content-type', 'image/webp')
+        .header('cache-control', 'public, max-age=31536000, immutable')
+        .send(data);
+    } catch {
+      throw new HttpError(404, 'Нет аватара');
+    }
+  });
 
   // ---------- channels / voice ----------
 
@@ -129,6 +185,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const { id } = parse(z.object({ id: z.string() }), req.params);
     if (id === req.user.id) throw new HttpError(400, 'Нельзя удалить самого себя');
     queries.deleteUser.run(id);
+    await rm(avatarPath(id), { force: true });
     await kickFromAllRooms(id);
     broadcastKicked(id);
     return { ok: true };

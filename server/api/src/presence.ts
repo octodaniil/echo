@@ -15,10 +15,20 @@ let log: FastifyBaseLogger | undefined;
 
 export function channelsSnapshot() {
   const channels = queries.listChannels.all() as unknown as Channel[];
+  // Current nickname/avatar come from our DB, so profile edits show up without rejoining.
+  const profiles = new Map(
+    (queries.userProfiles.all() as { id: string; nickname: string; avatar_version: number | null }[]).map((u) => [
+      u.id,
+      u,
+    ]),
+  );
   return channels.map((c) => ({
     id: c.id,
     name: c.name,
-    members: members.get(c.id) ?? [],
+    members: (members.get(c.id) ?? []).map((m) => {
+      const profile = profiles.get(m.id);
+      return profile ? { ...m, nickname: profile.nickname, avatar: profile.avatar_version } : m;
+    }),
   }));
 }
 

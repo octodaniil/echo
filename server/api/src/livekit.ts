@@ -36,6 +36,8 @@ export async function createJoinToken(user: User, channelId: number): Promise<st
 export interface ChannelMember {
   id: string;
   nickname: string;
+  /** Avatar version (see users.avatar_version), null when the user has none. */
+  avatar: number | null;
   streaming: boolean;
   joinedAt: number;
 }
@@ -44,6 +46,7 @@ export function toMember(p: ParticipantInfo): ChannelMember {
   return {
     id: p.identity,
     nickname: p.name || p.identity,
+    avatar: null,
     streaming: p.tracks.some((t) => t.source === TrackSource.SCREEN_SHARE),
     joinedAt: Number(p.joinedAt) * 1000,
   };
