@@ -2,11 +2,14 @@ export interface User {
   id: string;
   nickname: string;
   isAdmin: boolean;
+  /** Avatar version (cache key); null = no avatar. */
+  avatar: number | null;
 }
 
 export interface ChannelMember {
   id: string;
   nickname: string;
+  avatar: number | null;
   streaming: boolean;
   joinedAt: number;
 }
@@ -33,6 +36,16 @@ export interface Invite {
   max_uses: number | null;
   uses: number;
   expires_at: number | null;
+}
+
+export interface ScreenSource {
+  id: string;
+  kind: 'screen' | 'window';
+  name: string;
+  /** JPEG data URL. */
+  thumbnail: string;
+  /** App icon as PNG data URL (windows only). */
+  icon: string | null;
 }
 
 /** Shape of every IPC reply: errors are passed as data so their message survives the bridge. */

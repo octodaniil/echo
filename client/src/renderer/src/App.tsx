@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { Channel, Session, SessionEndReason } from '../../shared/types';
 import { Login } from './Login';
+import { setServerUrl } from './profile';
 import { Main } from './Shell';
 import { voice } from './voice';
 
@@ -11,10 +12,15 @@ const endNotice: Record<SessionEndReason, string | null> = {
 };
 
 export function App() {
-  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [session, setSessionState] = useState<Session | null | undefined>(undefined);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [online, setOnline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const setSession = (s: Session | null) => {
+    if (s) setServerUrl(s.serverUrl);
+    setSessionState(s);
+  };
 
   useEffect(() => {
     void window.echo.getSession().then(setSession);
@@ -47,5 +53,5 @@ export function App() {
       />
     );
   }
-  return <Main session={session} channels={channels} online={online} />;
+  return <Main session={session} channels={channels} online={online} onSession={setSession} />;
 }

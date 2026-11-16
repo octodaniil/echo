@@ -4,6 +4,8 @@ import type { Channel, Invite, IpcResult, Session, SessionEndReason, User, Voice
 import { authed, request } from './api';
 import { startEvents } from './events';
 import { clearSession, loadSession, normalizeServerUrl, saveSession, type ActiveSession } from './session';
+import { installDisplayMediaHandler, listSources, selectSource } from './screen';
+import { installUpdateNow, startUpdater, type UpdateInfo } from './updater';
 
 // Voice must keep playing without a click first.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -21,6 +23,7 @@ let current: ActiveSession | null = null;
 let stopEvents: (() => void) | null = null;
 let channels: Channel[] = [];
 let serverOnline = false;
+let readyUpdate: UpdateInfo | null = null;
 
 function send(channel: string, payload?: unknown) {
   win?.webContents.send(channel, payload);
@@ -110,6 +113,50 @@ function registerIpc() {
 
   handle('channels:delete', (id: number) => authed(requireSession(), `/api/channels/${id}`, { method: 'DELETE' }));
 
+  // ---------- profile ----------
+
+  const updateUser = async (user: User): Promise<Session> => {
+    const s = requireSession();
+    current = { ...s, user };
+    await saveSession(current);
+    return { serverUrl: current.serverUrl, user };
+  };
+
+  handle('me:update', async (patch: { nickname: string }) => {
+    const { user } = await authed<{ user: User }>(requireSession(), '/api/me', { method: 'PATCH', body: patch });
+    return updateUser(user);
+  });
+
+  handle('me:set-avatar', async (data: Uint8Array) => {
+    const { user } = await authed<{ user: User }>(requireSession(), '/api/me/avatar', {
+      method: 'PUT',
+      raw: { data, type: 'image/webp' },
+    });
+    return updateUser(user);
+  });
+
+  handle('me:remove-avatar', async () => {
+    const { user } = await authed<{ user: User }>(requireSession(), '/api/me/avatar', { method: 'DELETE' });
+    return updateUser(user);
+  });
+
+  // ---------- screen sharing ----------
+
+  handle('screen:sources', () => listSources(win?.getTitle() ?? 'Echo'));
+  handle('screen:select', (id: string, audio: boolean) => selectSource(id, audio));
+
+  // ---------- app ----------
+
+  handle('app:get-autostart', () => app.isPackaged && app.getLoginItemSettings().openAtLogin);
+  handle('app:set-autostart', (enabled: boolean) => {
+    if (!app.isPackaged) throw new Error('Автозапуск работает только в установленной версии');
+    app.setLoginItemSettings({ openAtLogin: enabled });
+    return enabled;
+  });
+
+  handle('app:info', () => ({ version: app.getVersion(), update: readyUpdate }));
+  handle('update:install', () => installUpdateNow());
+
   handle('invites:create', async () => {
     const { invite } = await authed<{ invite: Invite }>(requireSession(), '/api/invites', {
       method: 'POST',
@@ -130,6 +177,8 @@ function createWindow() {
     backgroundColor: '#111214',
     autoHideMenuBar: true,
     title: 'Echo',
+    // Packaged builds take the icon from the .exe.
+    ...(app.isPackaged ? {} : { icon: join(__dirname, '../../build/icon.png') }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -163,16 +212,24 @@ app.on('second-instance', () => {
 });
 
 app.whenReady().then(() => {
-  // Only the microphone (and later screen capture) is ever allowed.
+  // Only the microphone and screen capture are ever allowed.
+  const allowed = new Set(['media', 'display-capture']);
   electronSession.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(permission === 'media');
+    callback(allowed.has(permission));
   });
-  electronSession.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'media');
+  electronSession.defaultSession.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
+  installDisplayMediaHandler();
 
   registerIpc();
   const saved = loadSession();
   if (saved) beginSession(saved);
   createWindow();
+  startUpdater((info) => {
+    readyUpdate = info;
+    send('update-ready', info);
+  });
 });
+
+app.setAppUserModelId('io.github.octodaniil.echo');
 
 app.on('window-all-closed', () => app.quit());

@@ -11,17 +11,25 @@ export class ApiError extends Error {
 export async function request<T>(
   serverUrl: string,
   path: string,
-  opts: { method?: string; token?: string; body?: unknown } = {},
+  opts: { method?: string; token?: string; body?: unknown; raw?: { data: Uint8Array; type: string } } = {},
 ): Promise<T> {
   let res: Response;
+  const headers: Record<string, string> = {};
+  if (opts.token) headers.authorization = `Bearer ${opts.token}`;
+  let body: BodyInit | undefined;
+  if (opts.raw) {
+    headers['content-type'] = opts.raw.type;
+    // IPC delivers a Uint8Array; hand fetch a plain Buffer copy.
+    body = Buffer.from(opts.raw.data);
+  } else if (opts.body !== undefined) {
+    headers['content-type'] = 'application/json';
+    body = JSON.stringify(opts.body);
+  }
   try {
     res = await fetch(serverUrl + path, {
       method: opts.method ?? 'GET',
-      headers: {
-        ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}),
-        ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
-      },
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      headers,
+      body,
       signal: AbortSignal.timeout(10_000),
     });
   } catch (err) {
@@ -42,5 +50,9 @@ export async function request<T>(
   return data as T;
 }
 
-export const authed = <T>(s: ActiveSession, path: string, opts: { method?: string; body?: unknown } = {}) =>
+export const authed = <T>(
+  s: ActiveSession,
+  path: string,
+  opts: { method?: string; body?: unknown; raw?: { data: Uint8Array; type: string } } = {},
+) =>
   request<T>(s.serverUrl, path, { ...opts, token: s.token });
