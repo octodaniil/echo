@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger, FastifyReply } from 'fastify';
 import { ParticipantInfo_State, TrackSource, type WebhookEvent } from 'livekit-server-sdk';
-import { getPinnedFromRow, roomMembers, setAwardListener, streamStarted, voiceJoined, voiceLeft } from './achievements.ts';
+import { gameChanged, getPinnedFromRow, prestigeFromPoints, prestigeMap, roomMembers, setAwardListener, streamStarted, voiceJoined, voiceLeft } from './achievements.ts';
 import { queries, type Channel } from './db.ts';
 import { channelIdFromRoom, roomNameForChannel, roomService, toMember, type ChannelMember } from './livekit.ts';
 
@@ -22,13 +22,20 @@ export function channelsSnapshot() {
       queries.userProfiles.all() as { id: string; nickname: string; avatar_version: number | null; pinned: string }[]
     ).map((u) => [u.id, u]),
   );
+  const prestige = prestigeMap();
   return channels.map((c) => ({
     id: c.id,
     name: c.name,
     members: (members.get(c.id) ?? []).map((m) => {
       const profile = profiles.get(m.id);
       return profile
-        ? { ...m, nickname: profile.nickname, avatar: profile.avatar_version, pinned: getPinnedFromRow(profile.pinned) }
+        ? {
+            ...m,
+            nickname: profile.nickname,
+            avatar: profile.avatar_version,
+            pinned: getPinnedFromRow(profile.pinned),
+            prestige: prestige.get(m.id) ?? prestigeFromPoints(0),
+          }
         : m;
     }),
   }));
@@ -46,6 +53,11 @@ export function broadcastChannels() {
 /** Tells one user's open connections about a new achievement. */
 setAwardListener((userId, code) => {
   for (const reply of subscribers) if (reply.request.user?.id === userId) send(reply, 'achievement', { code });
+  // Ranks depend on achievements: let everyone see the new glow.
+  queueMicrotask(() => {
+    broadcastChannels();
+    broadcastPresence();
+  });
 });
 
 /** Asks one user's client to switch to another voice channel (admin drag & drop). */
@@ -70,6 +82,59 @@ export function broadcastKicked(userId: string) {
   }
 }
 
+// ---------- who is online and what they play ----------
+
+export interface Activity {
+  game: string;
+  since: number;
+}
+
+/** In memory only: it's "right now" information. */
+const activities = new Map<string, Activity>();
+
+const onlineIds = () => new Set([...subscribers].map((r) => r.request.user?.id).filter((id): id is string => !!id));
+
+export function presenceSnapshot() {
+  const online = onlineIds();
+  const prestige = prestigeMap();
+  const rows = queries.userProfiles.all() as {
+    id: string;
+    nickname: string;
+    avatar_version: number | null;
+    pinned: string;
+  }[];
+  return rows
+    .filter((u) => online.has(u.id))
+    .map((u) => ({
+      id: u.id,
+      nickname: u.nickname,
+      avatar: u.avatar_version,
+      pinned: getPinnedFromRow(u.pinned),
+      activity: activities.get(u.id) ?? null,
+      prestige: prestige.get(u.id) ?? prestigeFromPoints(0),
+    }))
+    .sort((a, b) => a.nickname.localeCompare(b.nickname, 'ru'));
+}
+
+export function broadcastPresence() {
+  const snapshot = presenceSnapshot();
+  for (const reply of subscribers) send(reply, 'presence', snapshot);
+}
+
+/** The client reports the game it detected (null = not playing). */
+export function setActivity(userId: string, game: string | null) {
+  const prev = activities.get(userId);
+  if (!game) {
+    if (!prev) return;
+    activities.delete(userId);
+  } else {
+    if (prev?.game === game) return;
+    activities.set(userId, { game, since: Date.now() });
+  }
+  gameChanged(userId, game);
+  broadcastPresence();
+}
+
 export function subscribe(reply: FastifyReply) {
   reply.hijack();
   reply.raw.writeHead(200, {
@@ -78,9 +143,20 @@ export function subscribe(reply: FastifyReply) {
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
+  const wasOnline = onlineIds().has(reply.request.user.id);
   subscribers.add(reply);
   send(reply, 'channels', channelsSnapshot());
-  reply.raw.on('close', () => subscribers.delete(reply));
+  if (wasOnline) send(reply, 'presence', presenceSnapshot());
+  else broadcastPresence();
+  reply.raw.on('close', () => {
+    subscribers.delete(reply);
+    const id = reply.request.user?.id;
+    // Last connection gone: offline, and no longer playing anything.
+    if (id && !onlineIds().has(id)) {
+      if (activities.delete(id)) gameChanged(id, null);
+      broadcastPresence();
+    }
+  });
 }
 
 async function refreshRoom(room: string) {

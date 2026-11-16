@@ -1,30 +1,51 @@
 import { db, queries, type User } from './db.ts';
 
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type Category = 'voice' | 'stream' | 'games' | 'social' | 'special';
 
 export interface AchievementDef {
   code: string;
   title: string;
   description: string;
   rarity: Rarity;
+  category: Category;
   /** Icon key, rendered by the client. */
   icon: string;
   /** Only an admin can give it. */
   manual?: boolean;
 }
 
+export const CATEGORIES: { id: Category; title: string }[] = [
+  { id: 'special', title: 'Особые' },
+  { id: 'voice', title: 'Голос' },
+  { id: 'games', title: 'Игры' },
+  { id: 'stream', title: 'Трансляции' },
+  { id: 'social', title: 'Сообщество' },
+];
+
 export const CATALOG: AchievementDef[] = [
-  { code: 'beta_tester', title: 'Первый бета-тестер', description: 'Был с Echo с самого начала и ловил баги первым', rarity: 'legendary', icon: 'flask', manual: true },
-  { code: 'founder', title: 'Основатель', description: 'Поднял свой сервер Echo', rarity: 'epic', icon: 'crown' },
-  { code: 'first_steps', title: 'Первые шаги', description: 'Впервые зашёл в голосовой канал', rarity: 'common', icon: 'door' },
-  { code: 'voice_1h', title: 'Разговорчивый', description: 'Провёл в голосе 1 час', rarity: 'common', icon: 'wave' },
-  { code: 'voice_10h', title: 'Душа компании', description: 'Провёл в голосе 10 часов', rarity: 'rare', icon: 'waves' },
-  { code: 'voice_100h', title: 'Легенда войса', description: 'Провёл в голосе 100 часов', rarity: 'legendary', icon: 'infinity' },
-  { code: 'marathon', title: 'Марафонец', description: '4 часа подряд в одном канале', rarity: 'epic', icon: 'timer' },
-  { code: 'night_owl', title: 'Полуночник', description: 'Был в голосе между 3 и 5 утра', rarity: 'rare', icon: 'moon' },
-  { code: 'streamer', title: 'В эфире', description: 'Запустил первую трансляцию', rarity: 'common', icon: 'broadcast' },
-  { code: 'stream_10', title: 'Стример', description: 'Провёл 10 трансляций', rarity: 'rare', icon: 'signal' },
-  { code: 'full_house', title: 'Полный сбор', description: 'Был в канале, где собрались 5 человек и больше', rarity: 'rare', icon: 'people' },
+  // special
+  { code: 'beta_tester', title: 'Первый бета-тестер', description: 'Был с Echo с самого начала и ловил баги первым', rarity: 'legendary', category: 'special', icon: 'flask', manual: true },
+  { code: 'founder', title: 'Основатель', description: 'Поднял свой сервер Echo', rarity: 'epic', category: 'special', icon: 'crown' },
+  // voice
+  { code: 'first_steps', title: 'Первые шаги', description: 'Впервые зашёл в голосовой канал', rarity: 'common', category: 'voice', icon: 'door' },
+  { code: 'voice_1h', title: 'Разговорчивый', description: 'Провёл в голосе 1 час', rarity: 'common', category: 'voice', icon: 'wave' },
+  { code: 'voice_10h', title: 'Душа компании', description: 'Провёл в голосе 10 часов', rarity: 'rare', category: 'voice', icon: 'waves' },
+  { code: 'voice_100h', title: 'Легенда войса', description: 'Провёл в голосе 100 часов', rarity: 'legendary', category: 'voice', icon: 'infinity' },
+  { code: 'marathon', title: 'Марафонец', description: '4 часа подряд в одном канале', rarity: 'epic', category: 'voice', icon: 'timer' },
+  { code: 'night_owl', title: 'Полуночник', description: 'Был в голосе между 3 и 5 утра', rarity: 'rare', category: 'voice', icon: 'moon' },
+  // games
+  { code: 'gamer', title: 'Геймер', description: 'Запустил игру, пока Echo был включён', rarity: 'common', category: 'games', icon: 'gamepad' },
+  { code: 'game_10h', title: 'Задрот', description: 'Наиграл 10 часов', rarity: 'rare', category: 'games', icon: 'joystick' },
+  { code: 'game_100h', title: 'Не выключает компьютер', description: 'Наиграл 100 часов', rarity: 'legendary', category: 'games', icon: 'trophy' },
+  { code: 'collector', title: 'Коллекционер', description: 'Играл в 5 разных игр', rarity: 'rare', category: 'games', icon: 'stack' },
+  { code: 'teammates', title: 'Тиммейты', description: 'Играли в одну игру, сидя в одном голосовом канале', rarity: 'rare', category: 'games', icon: 'handshake' },
+  { code: 'squad', title: 'Отряд', description: 'Трое и больше одновременно в одной игре', rarity: 'epic', category: 'games', icon: 'shield' },
+  // stream
+  { code: 'streamer', title: 'В эфире', description: 'Запустил первую трансляцию', rarity: 'common', category: 'stream', icon: 'broadcast' },
+  { code: 'stream_10', title: 'Стример', description: 'Провёл 10 трансляций', rarity: 'rare', category: 'stream', icon: 'signal' },
+  // social
+  { code: 'full_house', title: 'Полный сбор', description: 'Был в канале, где собрались 5 человек и больше', rarity: 'rare', category: 'social', icon: 'people' },
 ];
 
 const byCode = new Map(CATALOG.map((a) => [a.code, a]));
@@ -39,6 +60,14 @@ db.exec(`
     awarded_at  INTEGER NOT NULL,
     PRIMARY KEY (user_id, code)
   );
+
+  -- Time per game, for "hours played" stats and game achievements.
+  CREATE TABLE IF NOT EXISTS user_games (
+    user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    game     TEXT NOT NULL,
+    seconds  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, game)
+  );
 `);
 
 const q = {
@@ -49,6 +78,11 @@ const q = {
   addStream: db.prepare('UPDATE users SET streams_count = streams_count + 1 WHERE id = ?'),
   stats: db.prepare('SELECT voice_seconds, streams_count, is_admin FROM users WHERE id = ?'),
   setPinned: db.prepare('UPDATE users SET pinned = ? WHERE id = ?'),
+  addGame: db.prepare(
+    'INSERT INTO user_games (user_id, game, seconds) VALUES (?, ?, ?) ON CONFLICT(user_id, game) DO UPDATE SET seconds = seconds + excluded.seconds',
+  ),
+  gameTotals: db.prepare('SELECT COALESCE(SUM(seconds), 0) AS total, COUNT(*) AS games FROM user_games WHERE user_id = ?'),
+  topGames: db.prepare('SELECT game, seconds FROM user_games WHERE user_id = ? ORDER BY seconds DESC LIMIT 3'),
 };
 
 export function listAchievements(userId: string) {
@@ -102,7 +136,14 @@ export function setPinned(userId: string, codes: string[]) {
 
 export function getStats(userId: string) {
   const row = q.stats.get(userId) as { voice_seconds: number; streams_count: number; is_admin: number } | undefined;
-  return { voiceSeconds: row?.voice_seconds ?? 0, streamsCount: row?.streams_count ?? 0 };
+  const games = q.gameTotals.get(userId) as { total: number; games: number };
+  return {
+    voiceSeconds: row?.voice_seconds ?? 0,
+    streamsCount: row?.streams_count ?? 0,
+    gameSeconds: games.total,
+    gamesCount: games.games,
+    topGames: q.topGames.all(userId) as { game: string; seconds: number }[],
+  };
 }
 
 // ---------- automatic rules ----------
@@ -138,6 +179,7 @@ export function voiceJoined(userId: string, room: string) {
   if (prev && prev.room !== room) voiceLeft(userId, prev.room);
   if (!sessions.has(userId)) sessions.set(userId, { room, since: now, accounted: now });
   award(userId, 'first_steps');
+  checkTogether();
 }
 
 export function voiceLeft(userId: string, room: string) {
@@ -157,6 +199,103 @@ function flush(userId: string, s: Session, now: number) {
   if (now - s.since >= 4 * HOUR * 1000) award(userId, 'marathon');
   const h = localHour(now);
   if (h >= 3 && h < 5) award(userId, 'night_owl');
+}
+
+// ---------- prestige: rank from achievements ----------
+
+const POINTS: Record<Rarity, number> = { common: 10, rare: 25, epic: 60, legendary: 150 };
+/** Tier floors: none, bronze, silver, gold, legend. */
+const TIERS = [0, 30, 100, 220, 400];
+
+export interface Prestige {
+  points: number;
+  level: number;
+  tier: number;
+  nextTierAt: number | null;
+  tierFloor: number;
+}
+
+export function prestigeFromPoints(points: number): Prestige {
+  let tier = 0;
+  while (tier + 1 < TIERS.length && points >= TIERS[tier + 1]!) tier++;
+  return {
+    points,
+    // Grows quickly at first, slower later: 10 pts -> 1, 100 -> 4, 400 -> 8, 845 -> 11.
+    level: Math.max(1, Math.floor(Math.sqrt(points / 6.5))),
+    tier,
+    nextTierAt: TIERS[tier + 1] ?? null,
+    tierFloor: TIERS[tier]!,
+  };
+}
+
+const allAwards = db.prepare('SELECT user_id, code FROM user_achievements');
+
+/** Everyone's prestige in one query (used for channel/presence snapshots). */
+export function prestigeMap(): Map<string, Prestige> {
+  const pts = new Map<string, number>();
+  for (const r of allAwards.all() as { user_id: string; code: string }[]) {
+    const def = byCode.get(r.code);
+    if (def) pts.set(r.user_id, (pts.get(r.user_id) ?? 0) + POINTS[def.rarity]);
+  }
+  return new Map([...pts].map(([id, p]) => [id, prestigeFromPoints(p)]));
+}
+
+export const prestigeOf = (userId: string) => prestigeMap().get(userId) ?? prestigeFromPoints(0);
+
+// ---------- games ----------
+
+interface GameSession {
+  game: string;
+  accounted: number;
+}
+
+/** What each online user is playing right now (reported by their client). */
+const gameSessions = new Map<string, GameSession>();
+
+function flushGame(userId: string, g: GameSession, now: number) {
+  const secs = Math.floor((now - g.accounted) / 1000);
+  if (secs > 0) {
+    q.addGame.run(userId, g.game, secs);
+    g.accounted += secs * 1000;
+  }
+  const { gameSeconds, gamesCount } = getStats(userId);
+  if (gameSeconds >= 10 * HOUR) award(userId, 'game_10h');
+  if (gameSeconds >= 100 * HOUR) award(userId, 'game_100h');
+  if (gamesCount >= 5) award(userId, 'collector');
+}
+
+/** Called when a user's detected game changes (null = stopped / went offline). */
+export function gameChanged(userId: string, game: string | null) {
+  if (!queries.userById.get(userId)) return;
+  const now = Date.now();
+  const prev = gameSessions.get(userId);
+  if (prev) {
+    flushGame(userId, prev, now);
+    gameSessions.delete(userId);
+  }
+  if (game) {
+    gameSessions.set(userId, { game, accounted: now });
+    q.addGame.run(userId, game, 0); // counts toward "different games" right away
+    award(userId, 'gamer');
+    if (getStats(userId).gamesCount >= 5) award(userId, 'collector');
+  }
+  checkTogether();
+}
+
+/** Squad: 3+ people in the same game. Teammates: same game and same voice channel. */
+function checkTogether() {
+  const byGame = new Map<string, string[]>();
+  for (const [id, g] of gameSessions) byGame.set(g.game, [...(byGame.get(g.game) ?? []), id]);
+  for (const ids of byGame.values()) {
+    if (ids.length >= 3) for (const id of ids) award(id, 'squad');
+    if (ids.length < 2) continue;
+    const byRoom = new Map<string, string[]>();
+    for (const id of ids) {
+      const room = sessions.get(id)?.room;
+      if (room) byRoom.set(room, [...(byRoom.get(room) ?? []), id]);
+    }
+    for (const together of byRoom.values()) if (together.length >= 2) for (const id of together) award(id, 'teammates');
+  }
 }
 
 /** Everyone currently in a room (to keep sessions in sync after restarts and for full_house). */
@@ -182,5 +321,6 @@ export function startAchievementClock() {
   setInterval(() => {
     const now = Date.now();
     for (const [id, s] of sessions) flush(id, s, now);
+    for (const [id, g] of gameSessions) flushGame(id, g, now);
   }, 60_000).unref();
 }

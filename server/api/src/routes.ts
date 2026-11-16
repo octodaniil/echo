@@ -5,11 +5,13 @@ import { z } from 'zod';
 import {
   award,
   CATALOG,
+  CATEGORIES,
   getPinned,
   getStats,
   isAchievement,
   listAchievements,
   MAX_PINNED,
+  prestigeOf,
   revoke,
   setPinned,
 } from './achievements.ts';
@@ -23,8 +25,11 @@ import {
   channelsSnapshot,
   closeChannelRoom,
   handleWebhook,
+  broadcastPresence,
   kickFromAllRooms,
+  presenceSnapshot,
   sendMove,
+  setActivity,
   subscribe,
 } from './presence.ts';
 
@@ -72,12 +77,23 @@ export async function registerRoutes(app: FastifyInstance) {
     if (taken && taken.id !== req.user.id) throw new HttpError(409, 'Этот ник уже занят');
     queries.renameUser.run(body.nickname, req.user.id);
     broadcastChannels();
+    broadcastPresence();
     return { user: publicUser(queries.userById.get(req.user.id) as unknown as User) };
+  });
+
+  // ---------- online & activity ----------
+
+  app.get('/api/presence', { preHandler: requireUser }, async () => ({ users: presenceSnapshot() }));
+
+  app.put('/api/me/activity', { preHandler: requireUser }, async (req) => {
+    const body = parse(z.object({ game: z.string().trim().min(1).max(64).nullable() }), req.body);
+    setActivity(req.user.id, body.game);
+    return { ok: true };
   });
 
   // ---------- profiles & achievements ----------
 
-  app.get('/api/achievements', { preHandler: requireUser }, async () => ({ catalog: CATALOG }));
+  app.get('/api/achievements', { preHandler: requireUser }, async () => ({ catalog: CATALOG, categories: CATEGORIES }));
 
   app.get('/api/users/:id/profile', { preHandler: requireUser }, async (req) => {
     const { id } = parse(z.object({ id: z.string() }), req.params);
@@ -91,6 +107,7 @@ export async function registerRoutes(app: FastifyInstance) {
         ...getStats(id),
         achievements: listAchievements(id),
         pinned: getPinned(id),
+        prestige: prestigeOf(id),
       },
     };
   });
@@ -99,6 +116,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const body = parse(z.object({ codes: z.array(z.string()).max(MAX_PINNED) }), req.body);
     const pinned = setPinned(req.user.id, body.codes);
     broadcastChannels();
+    broadcastPresence();
     return { pinned };
   });
 
@@ -136,6 +154,7 @@ export async function registerRoutes(app: FastifyInstance) {
     await writeFile(avatarPath(req.user.id), data);
     queries.setAvatarVersion.run(Date.now(), req.user.id);
     broadcastChannels();
+    broadcastPresence();
     return { user: publicUser(queries.userById.get(req.user.id) as unknown as User) };
   });
 
@@ -143,6 +162,7 @@ export async function registerRoutes(app: FastifyInstance) {
     await rm(avatarPath(req.user.id), { force: true });
     queries.setAvatarVersion.run(null, req.user.id);
     broadcastChannels();
+    broadcastPresence();
     return { user: publicUser(queries.userById.get(req.user.id) as unknown as User) };
   });
 
