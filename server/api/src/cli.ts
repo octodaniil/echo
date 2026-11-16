@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util';
 import { createInvite } from './auth.ts';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { award, CATALOG, isAchievement, revoke } from './achievements.ts';
 import { avatarDir, queries, type Channel, type Invite, type User } from './db.ts';
 import { roomService } from './livekit.ts';
 
@@ -69,6 +70,29 @@ switch (command) {
     break;
   }
 
+  case 'award':
+  case 'revoke': {
+    const [nickname, code] = rest;
+    const user = nickname ? (queries.userByNickname.get(nickname) as User | undefined) : undefined;
+    if (!user || !code) {
+      console.error(`Использование: ${command} <ник> <код ачивки>. Коды: ${CATALOG.map((a) => a.code).join(', ')}`);
+      process.exit(1);
+    }
+    if (!isAchievement(code)) {
+      console.error(`Нет ачивки "${code}". Коды: ${CATALOG.map((a) => a.code).join(', ')}`);
+      process.exit(1);
+    }
+    if (command === 'award') award(user.id, code);
+    else revoke(user.id, code);
+    console.log(`${command === 'award' ? 'Выдано' : 'Забрано'}: «${CATALOG.find((a) => a.code === code)!.title}» — ${user.nickname}`);
+    break;
+  }
+
+  case 'achievements': {
+    for (const a of CATALOG) console.log(`${a.code.padEnd(12)} ${a.rarity.padEnd(10)} ${a.title}${a.manual ? ' (только вручную)' : ''}`);
+    break;
+  }
+
   case 'channels': {
     for (const c of queries.listChannels.all() as unknown as Channel[]) console.log(`#${c.id}  ${c.name}`);
     break;
@@ -80,6 +104,9 @@ switch (command) {
   invites                                   список инвайтов
   users                                     список пользователей
   kick <ник>                                удалить пользователя
+  award <ник> <код>                         выдать ачивку
+  revoke <ник> <код>                        забрать ачивку
+  achievements                              список ачивок
   channels                                  список каналов`);
     process.exit(command ? 1 : 0);
 }

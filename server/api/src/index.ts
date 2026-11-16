@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { startAchievementClock } from './achievements.ts';
 import { HttpError } from './auth.ts';
 import { config } from './config.ts';
 import { startPresence } from './presence.ts';
@@ -22,6 +23,7 @@ app.setErrorHandler((err, req, reply) => {
 await registerRoutes(app);
 await app.listen({ host: config.host, port: config.port });
 startPresence(app.log);
+startAchievementClock();
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {

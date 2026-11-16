@@ -2,6 +2,17 @@ import type { FastifyInstance } from 'fastify';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
+import {
+  award,
+  CATALOG,
+  getPinned,
+  getStats,
+  isAchievement,
+  listAchievements,
+  MAX_PINNED,
+  revoke,
+  setPinned,
+} from './achievements.ts';
 import { createInvite, HttpError, publicUser, redeemInvite, requireAdmin, requireUser } from './auth.ts';
 import { config } from './config.ts';
 import { avatarDir, queries, type Channel, type User } from './db.ts';
@@ -61,6 +72,49 @@ export async function registerRoutes(app: FastifyInstance) {
     queries.renameUser.run(body.nickname, req.user.id);
     broadcastChannels();
     return { user: publicUser(queries.userById.get(req.user.id) as unknown as User) };
+  });
+
+  // ---------- profiles & achievements ----------
+
+  app.get('/api/achievements', { preHandler: requireUser }, async () => ({ catalog: CATALOG }));
+
+  app.get('/api/users/:id/profile', { preHandler: requireUser }, async (req) => {
+    const { id } = parse(z.object({ id: z.string() }), req.params);
+    const user = queries.userById.get(id) as User | undefined;
+    if (!user) throw new HttpError(404, 'Пользователь не найден');
+    return {
+      profile: {
+        ...publicUser(user),
+        createdAt: user.created_at,
+        lastSeenAt: user.last_seen_at,
+        ...getStats(id),
+        achievements: listAchievements(id),
+        pinned: getPinned(id),
+      },
+    };
+  });
+
+  app.put('/api/me/pinned', { preHandler: requireUser }, async (req) => {
+    const body = parse(z.object({ codes: z.array(z.string()).max(MAX_PINNED) }), req.body);
+    const pinned = setPinned(req.user.id, body.codes);
+    broadcastChannels();
+    return { pinned };
+  });
+
+  app.post('/api/users/:id/achievements', { preHandler: requireAdmin }, async (req) => {
+    const { id } = parse(z.object({ id: z.string() }), req.params);
+    const body = parse(z.object({ code: z.string() }), req.body);
+    if (!queries.userById.get(id)) throw new HttpError(404, 'Пользователь не найден');
+    if (!isAchievement(body.code)) throw new HttpError(400, 'Нет такой ачивки');
+    award(id, body.code);
+    return { achievements: listAchievements(id) };
+  });
+
+  app.delete('/api/users/:id/achievements/:code', { preHandler: requireAdmin }, async (req) => {
+    const { id, code } = parse(z.object({ id: z.string(), code: z.string() }), req.params);
+    revoke(id, code);
+    broadcastChannels();
+    return { achievements: listAchievements(id) };
   });
 
   // ---------- avatars ----------

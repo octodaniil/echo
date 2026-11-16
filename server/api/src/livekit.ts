@@ -29,6 +29,8 @@ export async function createJoinToken(user: User, channelId: number): Promise<st
     canPublish: true,
     canSubscribe: true,
     canPublishData: true,
+    // Clients announce whose stream they watch via participant attributes (viewer counts).
+    canUpdateOwnMetadata: true,
   });
   return token.toJwt();
 }
@@ -38,6 +40,8 @@ export interface ChannelMember {
   nickname: string;
   /** Avatar version (see users.avatar_version), null when the user has none. */
   avatar: number | null;
+  /** Achievement codes the user shows off. */
+  pinned?: string[];
   streaming: boolean;
   joinedAt: number;
 }

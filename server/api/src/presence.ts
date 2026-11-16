@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger, FastifyReply } from 'fastify';
-import { ParticipantInfo_State, type WebhookEvent } from 'livekit-server-sdk';
+import { ParticipantInfo_State, TrackSource, type WebhookEvent } from 'livekit-server-sdk';
+import { getPinnedFromRow, roomMembers, setAwardListener, streamStarted, voiceJoined, voiceLeft } from './achievements.ts';
 import { queries, type Channel } from './db.ts';
 import { channelIdFromRoom, roomNameForChannel, roomService, toMember, type ChannelMember } from './livekit.ts';
 
@@ -17,17 +18,18 @@ export function channelsSnapshot() {
   const channels = queries.listChannels.all() as unknown as Channel[];
   // Current nickname/avatar come from our DB, so profile edits show up without rejoining.
   const profiles = new Map(
-    (queries.userProfiles.all() as { id: string; nickname: string; avatar_version: number | null }[]).map((u) => [
-      u.id,
-      u,
-    ]),
+    (
+      queries.userProfiles.all() as { id: string; nickname: string; avatar_version: number | null; pinned: string }[]
+    ).map((u) => [u.id, u]),
   );
   return channels.map((c) => ({
     id: c.id,
     name: c.name,
     members: (members.get(c.id) ?? []).map((m) => {
       const profile = profiles.get(m.id);
-      return profile ? { ...m, nickname: profile.nickname, avatar: profile.avatar_version } : m;
+      return profile
+        ? { ...m, nickname: profile.nickname, avatar: profile.avatar_version, pinned: getPinnedFromRow(profile.pinned) }
+        : m;
     }),
   }));
 }
@@ -40,6 +42,11 @@ export function broadcastChannels() {
   const snapshot = channelsSnapshot();
   for (const reply of subscribers) send(reply, 'channels', snapshot);
 }
+
+/** Tells one user's open connections about a new achievement. */
+setAwardListener((userId, code) => {
+  for (const reply of subscribers) if (reply.request.user?.id === userId) send(reply, 'achievement', { code });
+});
 
 /** Tells one user's open connections that they were removed. */
 export function broadcastKicked(userId: string) {
@@ -76,6 +83,7 @@ async function refreshRoom(room: string) {
         .map(toMember)
         .sort((a, b) => a.joinedAt - b.joinedAt),
     );
+    roomMembers(room, (members.get(channelId) ?? []).map((m) => m.id));
   } catch {
     // Room does not exist (anymore).
     members.delete(channelId);
@@ -145,6 +153,7 @@ export async function handleWebhook(event: WebhookEvent) {
       break;
 
     case 'participant_left':
+      if (who) voiceLeft(who, room);
       // Apply immediately instead of trusting a listing that may still include them.
       if (channelId !== null && who) {
         recentlyLeft.set(leftKey(room, who), Date.now() + LEFT_GRACE_MS);
@@ -154,12 +163,19 @@ export async function handleWebhook(event: WebhookEvent) {
       break;
 
     case 'participant_joined':
-      if (who) recentlyLeft.delete(leftKey(room, who));
+      if (who) {
+        recentlyLeft.delete(leftKey(room, who));
+        voiceJoined(who, room);
+      }
       await refreshRoom(room);
       scheduleRefresh(room);
       break;
 
     case 'track_published':
+      if (who && event.track?.source === TrackSource.SCREEN_SHARE) streamStarted(who);
+      await refreshRoom(room);
+      break;
+
     case 'track_unpublished':
       await refreshRoom(room);
       break;

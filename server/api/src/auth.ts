@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
+import { award } from './achievements.ts';
 import { queries, transaction, type Invite, type User } from './db.ts';
 
 export class HttpError extends Error {
@@ -39,7 +40,7 @@ export function createInvite(opts: {
 /** Redeems an invite and creates a user. Returns the user and their (only ever shown once) token. */
 export function redeemInvite(rawCode: string, nickname: string): { user: User; token: string } {
   const code = rawCode.trim().toUpperCase();
-  return transaction(() => {
+  const result = transaction(() => {
     const invite = queries.inviteByCode.get(code) as Invite | undefined;
     if (!invite) throw new HttpError(404, 'Инвайт не найден');
     if (invite.expires_at !== null && invite.expires_at < Date.now()) throw new HttpError(410, 'Инвайт истёк');
@@ -53,6 +54,8 @@ export function redeemInvite(rawCode: string, nickname: string): { user: User; t
     const user = queries.userByNickname.get(nickname) as unknown as User;
     return { user, token };
   });
+  if (result.user.is_admin) award(result.user.id, 'founder');
+  return result;
 }
 
 declare module 'fastify' {
