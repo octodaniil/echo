@@ -24,6 +24,10 @@ export interface Settings {
   streamQuality: string;
   /** Share sound along with the screen. */
   streamAudio: boolean;
+  /** Interface sounds (join/leave/mute/...). */
+  uiSounds: boolean;
+  /** 0..1 */
+  uiSoundsVolume: number;
 }
 
 export const defaults: Settings = {
@@ -40,6 +44,8 @@ export const defaults: Settings = {
   streamVolumes: {},
   streamQuality: '1080p60',
   streamAudio: true,
+  uiSounds: true,
+  uiSoundsVolume: 0.6,
 };
 
 const KEY = 'echo.settings.v1';

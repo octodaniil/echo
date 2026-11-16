@@ -212,8 +212,8 @@ app.on('second-instance', () => {
 });
 
 app.whenReady().then(() => {
-  // Only the microphone and screen capture are ever allowed.
-  const allowed = new Set(['media', 'display-capture']);
+  // Only the microphone, screen capture and HTML fullscreen (watching streams) are allowed.
+  const allowed = new Set(['media', 'display-capture', 'fullscreen']);
   electronSession.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
     callback(allowed.has(permission));
   });

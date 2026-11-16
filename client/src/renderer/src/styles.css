@@ -1186,3 +1186,115 @@ input[type='range'] {
 .stream-volume input {
   width: 110px;
 }
+
+/* ---------- voice status actions, connection, hover card ---------- */
+
+.voice-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.conn {
+  position: relative;
+}
+.conn-btn.q-excellent,
+.conn-btn.q-good,
+.conn-title.q-excellent,
+.conn-title.q-good {
+  color: var(--speaking);
+}
+.conn-btn.q-poor,
+.conn-title.q-poor {
+  color: var(--warn);
+}
+.conn-btn.q-lost,
+.conn-title.q-lost {
+  color: var(--danger);
+}
+.conn-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: -8px;
+  z-index: 30;
+  width: 210px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.conn-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.conn-popover dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+.conn-popover dt {
+  color: var(--muted);
+}
+.conn-popover dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.member.can-watch {
+  cursor: pointer;
+}
+.member:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.hovercard {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 220px;
+  max-width: 300px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.hovercard-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.hovercard-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hovercard-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.hovercard-tags:empty {
+  display: none;
+}
+.tag {
+  font-size: 11px;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.sound-row .field {
+  flex: 1;
+  max-width: 320px;
+}

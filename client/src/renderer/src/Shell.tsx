@@ -3,8 +3,9 @@ import type { Channel, Session } from '../../shared/types';
 import { Avatar } from './Avatar';
 import { ScreenPicker } from './ScreenPicker';
 import {
-  CloseIcon,
   FullscreenIcon,
+  ScreenOffIcon,
+  SignalIcon,
   GearIcon,
   HangUpIcon,
   HeadphonesIcon,
@@ -18,7 +19,7 @@ import {
 } from './icons';
 import { useSettings } from './profile';
 import { SettingsView } from './SettingsView';
-import { voice, type VoiceState } from './voice';
+import { voice, type ConnectionStats, type VoiceState } from './voice';
 
 function useVoice(): VoiceState {
   const [state, setState] = useState(voice.snapshot);
@@ -51,6 +52,7 @@ interface Person {
   speaking: boolean;
   micMuted: boolean;
   streaming: boolean;
+  joinedAt: number;
 }
 
 interface VolumeMenu {
@@ -75,6 +77,7 @@ export function Main({
   const [toast, showToast] = useToast();
   const [showSettings, setShowSettings] = useState(false);
   const [volumeMenu, setVolumeMenu] = useState<VolumeMenu | null>(null);
+  const [hover, setHover] = useState<HoverInfo | null>(null);
   const isAdmin = session.user.isAdmin;
   const me = session.user;
   const currentChannel = channels.find((c) => c.id === v.channelId) ?? null;
@@ -120,6 +123,7 @@ export function Main({
           nickname: prof?.nickname ?? p.nickname,
           avatar: prof?.avatar ?? null,
           streaming: p.streaming || (server?.streaming ?? false),
+          joinedAt: server?.joinedAt || p.joinedAt,
         };
       });
     }
@@ -135,6 +139,7 @@ export function Main({
       speaking: false,
       micMuted: false,
       streaming: m.streaming,
+      joinedAt: m.joinedAt,
     }));
   };
 
@@ -163,6 +168,8 @@ export function Main({
           peopleIn={peopleIn}
           onJoin={(id) => void voice.join(id)}
           onPersonMenu={openVolume}
+          onWatch={(channelId, userId) => void voice.watchUser(channelId, userId)}
+          onHover={setHover}
           onError={showToast}
         />
 
@@ -174,9 +181,17 @@ export function Main({
               </div>
               <div class="voice-status-channel">{currentChannel?.name ?? ''}</div>
             </div>
-            <button class="icon-btn danger" title="Отключиться" onClick={() => void voice.leave()}>
-              <HangUpIcon size={20} />
-            </button>
+            <div class="voice-status-actions">
+              <ConnectionIndicator quality={v.quality} />
+              {v.watching && (
+                <button class="icon-btn" title="Перестать смотреть трансляцию" onClick={() => voice.unwatch()}>
+                  <ScreenOffIcon size={18} />
+                </button>
+              )}
+              <button class="icon-btn danger" title="Отключиться" onClick={() => void voice.leave()}>
+                <HangUpIcon size={20} />
+              </button>
+            </div>
           </div>
         )}
 
@@ -217,6 +232,7 @@ export function Main({
         )}
       </main>
 
+      {hover && <HoverCard info={hover} />}
       {volumeMenu && <VolumePopover menu={volumeMenu} onClose={() => setVolumeMenu(null)} />}
       {showSettings && <SettingsView session={session} onSession={onSession} onClose={() => setShowSettings(false)} />}
       {toast && <div class="toast">{toast}</div>}
@@ -254,6 +270,8 @@ function ChannelList({
   peopleIn,
   onJoin,
   onPersonMenu,
+  onWatch,
+  onHover,
   onError,
 }: {
   channels: Channel[];
@@ -262,6 +280,8 @@ function ChannelList({
   peopleIn: (c: Channel) => Person[];
   onJoin: (id: number) => void;
   onPersonMenu: (e: MouseEvent, p: Person) => void;
+  onWatch: (channelId: number, userId: string) => void;
+  onHover: (info: HoverInfo | null) => void;
   onError: (msg: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
@@ -335,7 +355,16 @@ function ChannelList({
             {people.length > 0 && (
               <ul class="members">
                 {people.map((p) => (
-                  <li key={p.id} class="member" onContextMenu={(e) => onPersonMenu(e, p)}>
+                  <li
+                    key={p.id}
+                    class={`member${p.streaming && !p.isLocal ? ' can-watch' : ''}`}
+                    onContextMenu={(e) => onPersonMenu(e, p)}
+                    onDblClick={() => p.streaming && !p.isLocal && onWatch(c.id, p.id)}
+                    onMouseEnter={(e) =>
+                      onHover({ person: p, channel: c.name, rect: (e.currentTarget as HTMLElement).getBoundingClientRect() })
+                    }
+                    onMouseLeave={() => onHover(null)}
+                  >
                     <Avatar id={p.id} name={p.nickname} avatar={p.avatar} size={22} speaking={p.speaking} />
                     <span class="member-name">{p.nickname}</span>
                     {p.streaming && <span class="live-badge">LIVE</span>}
@@ -487,9 +516,6 @@ function StreamView({ person }: { person: Person }) {
         <button class="icon-btn" title="Во весь экран (двойной клик)" onClick={fullscreen}>
           <FullscreenIcon size={18} />
         </button>
-        <button class="icon-btn" title="Перестать смотреть" onClick={() => voice.unwatch()}>
-          <CloseIcon size={18} />
-        </button>
       </div>
     </div>
   );
@@ -535,6 +561,98 @@ function VolumePopover({ menu, onClose }: { menu: VolumeMenu; onClose: () => voi
         <button class="link-btn" onClick={() => voice.setUserVolume(menu.id, 1)}>
           Сбросить до 100%
         </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- hover card
+
+interface HoverInfo {
+  person: Person;
+  channel: string;
+  rect: DOMRect;
+}
+
+function sinceText(joinedAt: number): string {
+  const time = new Date(joinedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const mins = Math.max(0, Math.floor((Date.now() - joinedAt) / 60_000));
+  const dur = mins < 1 ? 'только что' : mins < 60 ? `${mins} мин` : `${Math.floor(mins / 60)} ч ${mins % 60} мин`;
+  return `в канале с ${time} · ${dur}`;
+}
+
+function HoverCard({ info }: { info: HoverInfo }) {
+  const { person: p, rect } = info;
+  // To the right of the sidebar row, kept inside the window.
+  const top = Math.min(rect.top - 6, window.innerHeight - 120);
+  return (
+    <div class="hovercard" style={{ left: rect.right + 10, top }}>
+      <Avatar id={p.id} name={p.nickname} avatar={p.avatar} size={44} speaking={p.speaking} />
+      <div class="hovercard-body">
+        <div class="hovercard-name">
+          {p.nickname}
+          {p.isLocal && <span class="muted"> (ты)</span>}
+        </div>
+        <div class="muted tiny">{sinceText(p.joinedAt)}</div>
+        <div class="hovercard-tags">
+          {p.streaming && <span class="live-badge">LIVE</span>}
+          {p.micMuted && <span class="tag">микрофон выключен</span>}
+          {p.streaming && !p.isLocal && <span class="muted tiny">двойной клик — смотреть</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- connection
+
+const QUALITY_TEXT: Record<VoiceState['quality'], string> = {
+  excellent: 'Отличное соединение',
+  good: 'Хорошее соединение',
+  poor: 'Плохое соединение',
+  lost: 'Связь потеряна',
+  unknown: 'Проверяем соединение…',
+};
+
+function ConnectionIndicator({ quality }: { quality: VoiceState['quality'] }) {
+  const [open, setOpen] = useState(false);
+  const [stats, setStats] = useState<ConnectionStats | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Poll stats only while the popover is open.
+  useEffect(() => {
+    if (!open) return;
+    const load = () => void voice.connectionStats().then(setStats);
+    load();
+    const t = window.setInterval(load, 1000);
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('mousedown', onDown);
+    };
+  }, [open]);
+
+  const bars = quality === 'good' ? 2 : quality === 'poor' || quality === 'lost' ? 1 : 3;
+  return (
+    <div class="conn" ref={ref}>
+      <button class={`icon-btn conn-btn q-${quality}`} title={QUALITY_TEXT[quality]} onClick={() => setOpen(!open)}>
+        <SignalIcon size={18} bars={bars} />
+      </button>
+      {open && (
+        <div class="conn-popover">
+          <div class={`conn-title q-${quality}`}>{QUALITY_TEXT[quality]}</div>
+          <dl>
+            <dt>Пинг</dt>
+            <dd>{stats?.rttMs != null ? `${stats.rttMs} мс` : '—'}</dd>
+            <dt>Потери</dt>
+            <dd>{stats?.lossPct != null ? `${stats.lossPct}%` : '—'}</dd>
+            <dt>Протокол</dt>
+            <dd>{stats?.transport ?? '—'}</dd>
+          </dl>
+        </div>
       )}
     </div>
   );

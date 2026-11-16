@@ -40,6 +40,14 @@ export class MicPipeline {
   private levelListeners = new Set<() => void>();
 
   constructor() {
+    // Voice is mono. RNNoise's worklet outputs stereo with only the left channel filled,
+    // which friends heard in one ear: take channel 0 explicitly and publish a mono track
+    // (receivers up-mix mono to both ears).
+    for (const node of [this.inputGain, this.gate, this.dest] as AudioNode[]) {
+      node.channelCount = 1;
+      node.channelCountMode = 'explicit';
+    }
+    this.inputGain.channelInterpretation = 'discrete';
     this.analyser.fftSize = 512;
     this.gate.gain.value = 0;
     this.inputGain.connect(this.analyser);

@@ -102,6 +102,23 @@ export const CloseIcon = (p: Props) => (
   </Icon>
 );
 
+export const ScreenOffIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M18 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 1-1.7M8 3h12a2 2 0 0 1 2 2v10a2 2 0 0 1-.6 1.4" />
+    <path d="M8 21h8M12 17v4" />
+    <path d="M2 2l20 20" />
+  </Icon>
+);
+
+/** Connection strength, Discord-style bars; unused bars are dimmed. */
+export const SignalIcon = ({ bars = 3, ...p }: Props & { bars?: number }) => (
+  <Icon {...p} stroke-width="2.6">
+    <path d="M5 19v-3" opacity={bars >= 1 ? 1 : 0.3} />
+    <path d="M12 19v-7" opacity={bars >= 2 ? 1 : 0.3} />
+    <path d="M19 19V6" opacity={bars >= 3 ? 1 : 0.3} />
+  </Icon>
+);
+
 export const FullscreenIcon = (p: Props) => (
   <Icon {...p}>
     <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />

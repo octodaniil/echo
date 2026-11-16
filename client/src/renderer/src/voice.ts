@@ -1,4 +1,5 @@
 import {
+  type ConnectionQuality,
   ConnectionState,
   DisconnectReason,
   LocalAudioTrack,
@@ -13,6 +14,7 @@ import {
   type TrackPublication,
 } from 'livekit-client';
 import { MicPipeline } from './mic';
+import { play } from './sounds';
 import { settings, type Settings } from './settings';
 import { qualityById } from './streamQuality';
 
@@ -25,6 +27,19 @@ export interface VoiceParticipant {
   speaking: boolean;
   micMuted: boolean;
   streaming: boolean;
+  /** When they joined this channel (ms since epoch). */
+  joinedAt: number;
+}
+
+export type ConnectionQualityLevel = 'excellent' | 'good' | 'poor' | 'lost' | 'unknown';
+
+export interface ConnectionStats {
+  /** Round trip to the media server, ms. */
+  rttMs: number | null;
+  /** Share of our audio packets lost on the way (from server reports), %. */
+  lossPct: number | null;
+  /** udp / tcp, and whether a relay is used. */
+  transport: string | null;
 }
 
 export interface SharingInfo {
@@ -43,6 +58,8 @@ export interface VoiceState {
   sharing: SharingInfo | null;
   /** Whose stream we are watching. */
   watching: string | null;
+  /** LiveKit's estimate of our connection. */
+  quality: ConnectionQualityLevel;
   error: string | null;
 }
 
@@ -54,6 +71,7 @@ const initial: VoiceState = {
   participants: [],
   sharing: null,
   watching: null,
+  quality: 'unknown',
   error: null,
 };
 
@@ -79,6 +97,8 @@ class VoiceClient {
   private lastPacketTs = new Map<string, number>();
   private screenStream: MediaStream | null = null;
   private screenPubs: LocalTrackPublication[] = [];
+  /** Someone whose stream we want to open as soon as it shows up (double-click from the list). */
+  private pendingWatch: string | null = null;
 
   private state: VoiceState = { ...initial };
   private listeners = new Set<(s: VoiceState) => void>();
@@ -210,6 +230,7 @@ class VoiceClient {
             : (this.remoteSpeakingUntil.get(p.identity) ?? 0) > now,
           micMuted: isLocal ? this.state.micMuted : !p.isMicrophoneEnabled,
           streaming: !!p.getTrackPublication(Track.Source.ScreenShare),
+          joinedAt: p.joinedAt?.getTime() ?? Date.now(),
         };
       })
       .sort((a, b) => Number(b.isLocal) - Number(a.isLocal) || a.nickname.localeCompare(b.nickname));
@@ -236,6 +257,12 @@ class VoiceClient {
         );
       });
     if (!same) this.set({ participants, watching });
+
+    if (this.pendingWatch && participants.some((p) => p.id === this.pendingWatch && p.streaming)) {
+      const id = this.pendingWatch;
+      this.pendingWatch = null;
+      this.watch(id);
+    }
   }
 
   /**
@@ -271,7 +298,7 @@ class VoiceClient {
 
   async join(channelId: number) {
     if (this.state.channelId === channelId && this.state.status !== 'idle') return;
-    await this.leave();
+    await this.leave(true);
     this.set({ status: 'connecting', channelId, error: null });
 
     const s = settings.get();
@@ -291,14 +318,22 @@ class VoiceClient {
 
     const sync = () => this.room === room && this.syncParticipants();
     room
-      .on(RoomEvent.ParticipantConnected, sync)
+      .on(RoomEvent.ParticipantConnected, () => {
+        void play('userJoin');
+        sync();
+      })
       .on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
         this.remoteSpeakingUntil.delete(p.identity);
+        void play('userLeave');
         sync();
       })
       .on(RoomEvent.TrackPublished, (pub: RemoteTrackPublication) => {
         this.autoSubscribe(pub);
+        if (pub.source === Track.Source.ScreenShare) void play('streamStart');
         sync();
+      })
+      .on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, p: Participant) => {
+        if (this.room === room && p === room.localParticipant) this.set({ quality: quality as ConnectionQualityLevel });
       })
       .on(RoomEvent.TrackUnpublished, sync)
       .on(RoomEvent.TrackMuted, sync)
@@ -328,6 +363,7 @@ class VoiceClient {
       })
       .on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
         if (this.room !== room) return;
+        if (everConnected && reason !== DisconnectReason.CLIENT_INITIATED) void play('disconnected');
         const error = !everConnected
           ? 'Не удалось подключиться к голосовому серверу'
           : reason === DisconnectReason.PARTICIPANT_REMOVED
@@ -361,6 +397,7 @@ class VoiceClient {
       if (this.state.micMuted || this.state.deafened) await micTrack.mute();
 
       this.set({ status: 'connected' });
+      void play('join');
       this.speakingTimer = window.setInterval(() => this.pollRemoteSpeaking(), 60);
       this.syncParticipants();
     } catch (err) {
@@ -370,9 +407,14 @@ class VoiceClient {
     }
   }
 
-  async leave() {
+  /** @param switching true when leaving only to join another channel (no "leave" sound). */
+  async leave(switching = false) {
     const room = this.room;
     if (!room) return;
+    if (!switching) {
+      this.pendingWatch = null;
+      void play('leave');
+    }
     await this.teardown(null);
     await room.disconnect();
   }
@@ -430,7 +472,9 @@ class VoiceClient {
           videoCodec: 'h264',
           // One layer: no extra encoder work for a handful of friends.
           simulcast: false,
-          videoEncoding: { maxBitrate: q.bitrate, maxFramerate: q.fps, priority: 'high' },
+          // For screen shares LiveKit reads screenShareEncoding (videoEncoding is ignored and
+          // it falls back to its 1080p·15 fps preset — streams looked choppy because of that).
+          screenShareEncoding: { maxBitrate: q.bitrate, maxFramerate: q.fps, priority: 'high' },
           degradationPreference: q.fps >= 60 ? 'maintain-framerate' : 'maintain-resolution',
         }),
       );
@@ -451,12 +495,14 @@ class VoiceClient {
       throw err;
     }
     this.set({ sharing: { sourceName: source.name, quality: q.label, withAudio: !!stream.getAudioTracks()[0] } });
+    void play('streamStart');
     this.syncParticipants();
   }
 
   async stopScreenShare() {
     const room = this.room;
     const pubs = this.screenPubs;
+    if (pubs.length > 0) void play('streamStop');
     this.screenPubs = [];
     if (room) {
       for (const pub of pubs) if (pub.track) await room.localParticipant.unpublishTrack(pub.track, true).catch(() => {});
@@ -510,6 +556,43 @@ class VoiceClient {
     this.set({ watching: participantId });
   }
 
+  /** Double-click on a streamer in the list: join their channel if needed, then open the stream. */
+  async watchUser(channelId: number, userId: string) {
+    if (this.state.channelId === channelId && this.state.status === 'connected') {
+      this.watch(userId);
+      return;
+    }
+    this.pendingWatch = userId;
+    await this.join(channelId);
+    this.syncParticipants();
+  }
+
+  /** Ping, loss and transport of the media connection (for the connection popover). */
+  async connectionStats(): Promise<ConnectionStats> {
+    const engine = (this.room as unknown as { engine?: { pcManager?: { publisher?: { pc?: RTCPeerConnection } } } } | null)
+      ?.engine;
+    const pc = engine?.pcManager?.publisher?.pc;
+    const result: ConnectionStats = { rttMs: null, lossPct: null, transport: null };
+    if (!pc) return result;
+    const report = await pc.getStats();
+    let pairId: string | undefined;
+    report.forEach((s) => {
+      if (s.type === 'transport' && s.selectedCandidatePairId) pairId = s.selectedCandidatePairId;
+    });
+    report.forEach((s) => {
+      const isPair = s.type === 'candidate-pair' && (pairId ? s.id === pairId : s.nominated && s.state === 'succeeded');
+      if (isPair) {
+        if (typeof s.currentRoundTripTime === 'number') result.rttMs = Math.round(s.currentRoundTripTime * 1000);
+        const local = report.get(s.localCandidateId);
+        if (local) result.transport = `${String(local.protocol).toUpperCase()}${local.candidateType === 'relay' ? ' (relay)' : ''}`;
+      }
+      if (s.type === 'remote-inbound-rtp' && s.kind === 'audio' && typeof s.fractionLost === 'number') {
+        result.lossPct = Math.round(s.fractionLost * 1000) / 10;
+      }
+    });
+    return result;
+  }
+
   unwatch() {
     const id = this.state.watching;
     if (!id) return;
@@ -548,7 +631,8 @@ class VoiceClient {
     await this.setMic(!this.state.micMuted);
   }
 
-  private async setMic(muted: boolean) {
+  private async setMic(muted: boolean, silent = false) {
+    if (!silent && muted !== this.state.micMuted) void play(muted ? 'mute' : 'unmute');
     this.set({ micMuted: muted });
     if (this.micTrack) await (muted ? this.micTrack.mute() : this.micTrack.unmute());
     this.syncParticipants();
@@ -556,15 +640,16 @@ class VoiceClient {
 
   async toggleDeafen() {
     const deafened = !this.state.deafened;
+    void play(deafened ? 'deafen' : 'undeafen');
     if (deafened) {
       this.micMutedBeforeDeafen = this.state.micMuted;
       this.set({ deafened });
       this.applyVolumes();
-      await this.setMic(true);
+      await this.setMic(true, true);
     } else {
       this.set({ deafened });
       this.applyVolumes();
-      await this.setMic(this.micMutedBeforeDeafen);
+      await this.setMic(this.micMutedBeforeDeafen, true);
     }
   }
 

@@ -6,6 +6,7 @@ import { CloseIcon } from './icons';
 import type { MicPipeline } from './mic';
 import { makeAvatar, useSettings } from './profile';
 import { settings, type NoiseSuppressionMode } from './settings';
+import { play } from './sounds';
 import { voice } from './voice';
 
 type Tab = 'voice' | 'account' | 'app';
@@ -205,6 +206,30 @@ function VoiceTab() {
           </label>
         ))}
       </div>
+
+      <h3>Звуки интерфейса</h3>
+      <label class="switch-row">
+        <span>
+          Звуки входа, выхода, мута и трансляций
+          <small>Короткие сигналы, как в Discord</small>
+        </span>
+        <Toggle checked={s.uiSounds} onChange={(v) => settings.update({ uiSounds: v })} />
+      </label>
+      {s.uiSounds && (
+        <div class="row sound-row">
+          <Field label={`Громкость звуков — ${Math.round(s.uiSoundsVolume * 100)}%`}>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={s.uiSoundsVolume}
+              onInput={(e) => settings.update({ uiSoundsVolume: Number(e.currentTarget.value) })}
+              onChange={() => void play('join')}
+            />
+          </Field>
+        </div>
+      )}
 
       <h3>Обработка голоса</h3>
       <label class="switch-row">
