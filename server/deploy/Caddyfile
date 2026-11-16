@@ -5,15 +5,24 @@
 }
 
 {$ECHO_DOMAIN}:8443 {
+	# `handle` blocks are mutually exclusive and the most specific path wins.
+	# (Bare `respond` would run before `reverse_proxy` and swallow everything.)
+
 	# Webhooks are only for LiveKit on localhost, never from the internet.
-	@internal path /api/livekit/*
-	respond @internal 404
+	handle /api/livekit/* {
+		respond 404
+	}
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3000
+	}
 
 	# LiveKit signaling (WebSocket).
-	@livekit path /rtc /rtc/*
-	reverse_proxy @livekit 127.0.0.1:7880
+	handle /rtc* {
+		reverse_proxy 127.0.0.1:7880
+	}
 
-	reverse_proxy /api/* 127.0.0.1:3000
-
-	respond "Echo server" 200
+	handle {
+		respond "Echo server" 200
+	}
 }
