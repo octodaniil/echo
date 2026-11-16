@@ -47,6 +47,11 @@ const api = {
   revokeAchievement: (userId: string, code: string) => call<unknown>('ach:revoke', userId, code),
   onAchievement: (cb: (code: string) => void) => on('achievement', cb),
 
+  moveUser: (channelId: number, userId: string) => call<unknown>('channels:move', channelId, userId),
+  onMove: (cb: (m: { channelId: number; by: string }) => void) => on('move', cb),
+  setHotkeys: (map: Record<string, string | null>) => call<Record<string, string | null>>('hotkeys:set', map),
+  onHotkey: (cb: (action: string) => void) => on('hotkey', cb),
+
   getScreenSources: () => call<ScreenSource[]>('screen:sources'),
   selectScreenSource: (id: string, audio: boolean) => call<void>('screen:select', id, audio),
 

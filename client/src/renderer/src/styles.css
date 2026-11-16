@@ -17,9 +17,10 @@
   --text: #e6edf5;
   --muted: #7c8899;
   --accent: #29f0cf;
+  --accent-hi: #9ffcf0;
   --accent-2: #7b61ff;
   --accent-ink: #00160f;
-  --accent-soft: rgba(41, 240, 207, 0.1);
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
   --danger: #ff4d6d;
   --warn: #ffb547;
   --speaking: #39ff9c;
@@ -32,6 +33,39 @@
   --r-epic: #b46cff;
   --r-legendary: #ffb02e;
   color-scheme: dark;
+}
+
+/* ---------- color themes (only the accent family changes) ---------- */
+
+:root[data-theme='violet'] {
+  --accent: #a78bfa;
+  --accent-hi: #e2d9ff;
+  --accent-2: #ff5cc8;
+  --accent-ink: #14002e;
+}
+:root[data-theme='crimson'] {
+  --accent: #ff5577;
+  --accent-hi: #ffc2cf;
+  --accent-2: #ff9f1c;
+  --accent-ink: #2b0008;
+}
+:root[data-theme='amber'] {
+  --accent: #ffb02e;
+  --accent-hi: #ffe2a8;
+  --accent-2: #ff5e3a;
+  --accent-ink: #2a1500;
+}
+:root[data-theme='ice'] {
+  --accent: #4cc9ff;
+  --accent-hi: #c8eeff;
+  --accent-2: #7b61ff;
+  --accent-ink: #001826;
+}
+:root[data-theme='matrix'] {
+  --accent: #39ff6e;
+  --accent-hi: #c4ffd4;
+  --accent-2: #00d1b2;
+  --accent-ink: #001a08;
 }
 
 * {
@@ -87,7 +121,7 @@ input {
 input:focus,
 select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(41, 240, 207, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 input[type='range'] {
   padding: 0;
@@ -135,7 +169,7 @@ input[type='radio'] {
   font-weight: 700;
   letter-spacing: 0.32em;
   font-size: 22px;
-  background: linear-gradient(90deg, var(--accent), #9ffcf0 60%, var(--accent-2));
+  background: linear-gradient(90deg, var(--accent), var(--accent-hi) 60%, var(--accent-2));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -150,8 +184,8 @@ input[type='radio'] {
   border-radius: 50%;
   border: 3px solid var(--accent);
   box-shadow:
-    0 0 0 3px rgba(41, 240, 207, 0.14),
-    0 0 14px rgba(41, 240, 207, 0.45);
+    0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent),
+    0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
   flex-shrink: 0;
 }
 .brand.small .brand-mark {
@@ -168,7 +202,7 @@ input[type='radio'] {
   font-weight: 650;
   letter-spacing: 0.02em;
   color: var(--accent-ink);
-  background: linear-gradient(135deg, var(--accent), #5ff7df);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hi));
   clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
 .primary:hover:not(:disabled) {
@@ -189,7 +223,7 @@ input[type='radio'] {
 }
 .secondary:hover:not(:disabled) {
   background: var(--hover);
-  border-color: rgba(41, 240, 207, 0.35);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .secondary.active {
   border-color: var(--accent);
@@ -294,7 +328,7 @@ input[type='radio'] {
   gap: 8px;
   color: var(--accent);
   background: var(--accent-soft);
-  border-color: rgba(41, 240, 207, 0.25);
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .update button {
   border: none;
@@ -320,8 +354,8 @@ input[type='radio'] {
   display: grid;
   place-items: center;
   background:
-    radial-gradient(900px 500px at 50% -10%, rgba(41, 240, 207, 0.1), transparent 60%),
-    radial-gradient(700px 400px at 100% 110%, rgba(123, 97, 255, 0.1), transparent 60%),
+    radial-gradient(900px 500px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+    radial-gradient(700px 400px at 100% 110%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 60%),
     linear-gradient(rgba(130, 200, 255, 0.035) 1px, transparent 1px) 0 0 / 32px 32px,
     linear-gradient(90deg, rgba(130, 200, 255, 0.035) 1px, transparent 1px) 0 0 / 32px 32px,
     var(--bg);
@@ -447,7 +481,7 @@ input[type='radio'] {
 }
 .channel.active {
   color: var(--text);
-  background: linear-gradient(90deg, rgba(41, 240, 207, 0.12), rgba(41, 240, 207, 0.02));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, transparent), color-mix(in srgb, var(--accent) 2%, transparent));
 }
 .channel.active::before {
   content: '';
@@ -701,8 +735,8 @@ input[type='radio'] {
   display: flex;
   /* Static grid + glow: painted once, costs nothing afterwards. */
   background:
-    radial-gradient(1000px 520px at 50% 0%, rgba(41, 240, 207, 0.06), transparent 65%),
-    radial-gradient(800px 500px at 100% 100%, rgba(123, 97, 255, 0.06), transparent 60%),
+    radial-gradient(1000px 520px at 50% 0%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 65%),
+    radial-gradient(800px 500px at 100% 100%, color-mix(in srgb, var(--accent-2) 6%, transparent), transparent 60%),
     linear-gradient(rgba(130, 200, 255, 0.03) 1px, transparent 1px) 0 0 / 40px 40px,
     linear-gradient(90deg, rgba(130, 200, 255, 0.03) 1px, transparent 1px) 0 0 / 40px 40px,
     var(--bg);
@@ -723,8 +757,8 @@ input[type='radio'] {
   border: 1px solid var(--border-2);
   color: var(--accent);
   box-shadow:
-    0 0 0 10px rgba(41, 240, 207, 0.03),
-    0 0 40px rgba(41, 240, 207, 0.12);
+    0 0 0 10px color-mix(in srgb, var(--accent) 3%, transparent),
+    0 0 40px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .voice-stage {
@@ -784,7 +818,7 @@ input[type='radio'] {
   transition: border-color 0.12s;
 }
 .tile:hover {
-  border-color: rgba(41, 240, 207, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .tile.speaking {
   border-color: var(--speaking);
@@ -860,7 +894,7 @@ input[type='radio'] {
 }
 .round-btn:hover:not(:disabled) {
   background: var(--hover);
-  border-color: rgba(41, 240, 207, 0.35);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .round-btn:disabled {
   opacity: 0.4;
@@ -872,7 +906,7 @@ input[type='radio'] {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
-  box-shadow: 0 0 22px rgba(41, 240, 207, 0.4);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .round-btn.danger {
   background: linear-gradient(135deg, #ff3d6a, #e02150);
@@ -922,7 +956,7 @@ input[type='radio'] {
 }
 .viewer-chip.has {
   color: var(--text);
-  border-color: rgba(41, 240, 207, 0.4);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 /* ---------- stream viewer ---------- */
@@ -995,19 +1029,31 @@ input[type='radio'] {
   right: 18px;
   bottom: 92px;
   z-index: 5;
-  width: 300px;
-  aspect-ratio: 16 / 9;
-  border-radius: 12px;
+  width: 320px;
+  height: 196px;
+  min-width: 200px;
+  min-height: 124px;
+  max-width: calc(100% - 20px);
+  max-height: calc(100% - 20px);
+  /* Native corner handle: resizing costs nothing until you drag it. */
+  resize: both;
   overflow: hidden;
+  border-radius: 12px;
   background: #000;
   border: 1px solid rgba(255, 61, 106, 0.45);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
 }
-.self-preview video {
+.self-preview-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.self-preview-body video {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+  background: #000;
 }
 .self-preview-top {
   position: absolute;
@@ -1018,7 +1064,12 @@ input[type='radio'] {
   align-items: center;
   gap: 7px;
   padding: 7px 7px 14px 9px;
-  background: linear-gradient(rgba(0, 0, 0, 0.7), transparent);
+  background: linear-gradient(rgba(0, 0, 0, 0.75), transparent);
+  cursor: grab;
+  touch-action: none;
+}
+.self-preview-top:active {
+  cursor: grabbing;
 }
 .self-preview-stats {
   position: absolute;
@@ -1033,6 +1084,14 @@ input[type='radio'] {
   color: #cfe9ff;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
 }
+.sp-viewers {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.self-preview-body.popout .self-preview-top {
+  cursor: default;
+}
 .self-preview-collapsed {
   position: absolute;
   right: 18px;
@@ -1046,6 +1105,44 @@ input[type='radio'] {
   border: 1px solid rgba(255, 61, 106, 0.45);
   background: var(--panel-2);
   font-size: 12px;
+}
+
+/* ---------- pop-out windows ---------- */
+
+.popout-body {
+  background: #000;
+  overflow: hidden;
+}
+.popout-root,
+.popout-body > .popout-root > * {
+  width: 100vw;
+  height: 100vh;
+}
+.stream.popout {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+.popped-placeholder {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+  background: var(--panel);
+}
+.popped-placeholder p {
+  margin: 8px 0 12px;
+}
+
+/* ---------- admin drag & drop ---------- */
+
+.channel.drop {
+  color: var(--text);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.member[draggable='true'] {
+  cursor: grab;
 }
 
 /* ---------- settings screen ---------- */
@@ -1089,7 +1186,7 @@ input[type='radio'] {
 }
 .settings-nav-item.active {
   color: var(--text);
-  background: linear-gradient(90deg, rgba(41, 240, 207, 0.12), rgba(41, 240, 207, 0.02));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, transparent), color-mix(in srgb, var(--accent) 2%, transparent));
 }
 .settings-body {
   flex: 1;
@@ -1214,7 +1311,7 @@ input[type='radio'] {
   transition: transform 0.12s;
 }
 .toggle.on {
-  background: rgba(41, 240, 207, 0.25);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
   border-color: var(--accent);
 }
 .toggle.on span {
@@ -1287,11 +1384,11 @@ input[type='radio'] {
   cursor: pointer;
 }
 .radio-card:hover {
-  border-color: rgba(41, 240, 207, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .radio-card.checked {
   border-color: var(--accent);
-  background: linear-gradient(90deg, rgba(41, 240, 207, 0.08), transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent);
 }
 .radio-card input {
   margin: 0;
@@ -1528,7 +1625,7 @@ input[type='radio'] {
   contain: layout paint;
 }
 .source:hover {
-  border-color: rgba(41, 240, 207, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .source.selected {
   border-color: var(--accent);
@@ -1740,7 +1837,7 @@ input[type='radio'] {
   flex-shrink: 0;
   background:
     radial-gradient(600px 160px at 20% 0%, color-mix(in srgb, var(--rc) 45%, transparent), transparent 70%),
-    radial-gradient(500px 160px at 100% 100%, rgba(123, 97, 255, 0.35), transparent 70%),
+    radial-gradient(500px 160px at 100% 100%, color-mix(in srgb, var(--accent-2) 35%, transparent), transparent 70%),
     linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px) 0 0 / 22px 22px,
     linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) 0 0 / 22px 22px,
     #0b1018;
@@ -1800,7 +1897,7 @@ input[type='radio'] {
 }
 .chip-static.admin {
   color: var(--accent);
-  border-color: rgba(41, 240, 207, 0.45);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   background: var(--accent-soft);
 }
 .showcase {
@@ -1888,7 +1985,7 @@ input[type='radio'] {
 }
 .ach.pinned {
   border-color: var(--accent);
-  background: linear-gradient(90deg, rgba(41, 240, 207, 0.08), transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent);
 }
 .ach.locked .ach-title {
   color: var(--muted);
@@ -1987,4 +2084,97 @@ input[type='radio'] {
   * {
     transition: none !important;
   }
+}
+
+/* ---------- hotkeys ---------- */
+
+.hotkeys {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hotkey-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.hotkey-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.hotkey-title {
+  font-weight: 650;
+}
+.hotkey-error {
+  color: #ffa3b4;
+}
+.hotkey-warn {
+  color: #ffd38a;
+}
+.keycap-btn {
+  min-width: 150px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-2);
+  border-bottom-width: 3px;
+  border-radius: 8px;
+  background: var(--panel-3);
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.keycap-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.keycap-btn.recording {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.tag.q {
+  color: var(--muted);
+  background: var(--panel-3);
+}
+.tag.q-poor,
+.tag.q-lost {
+  color: #ffa3b4;
+  background: rgba(255, 77, 109, 0.1);
+}
+
+/* ---------- theme picker ---------- */
+
+.themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+.theme-swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 12px;
+  background: var(--panel);
+  text-align: left;
+}
+.theme-swatch:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.theme-swatch.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.theme-preview {
+  height: 46px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.theme-name {
+  font-size: 13px;
+  font-weight: 600;
 }

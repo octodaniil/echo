@@ -7,9 +7,19 @@ import type { MicPipeline } from './mic';
 import { makeAvatar, useSettings } from './profile';
 import { settings, type NoiseSuppressionMode } from './settings';
 import { play } from './sounds';
+import { THEMES } from './themes';
+import {
+  acceleratorFrom,
+  HOTKEY_ACTIONS,
+  hotkeyErrors,
+  hotkeyLabel,
+  isRisky,
+  onHotkeyErrors,
+  type HotkeyAction,
+} from './hotkeys';
 import { voice } from './voice';
 
-type Tab = 'voice' | 'account' | 'app';
+type Tab = 'voice' | 'hotkeys' | 'account' | 'app';
 
 export function SettingsView({
   session,
@@ -38,6 +48,9 @@ export function SettingsView({
         <NavItem active={tab === 'account'} onClick={() => setTab('account')}>
           Профиль
         </NavItem>
+        <NavItem active={tab === 'hotkeys'} onClick={() => setTab('hotkeys')}>
+          Горячие клавиши
+        </NavItem>
         <NavItem active={tab === 'app'} onClick={() => setTab('app')}>
           Приложение
         </NavItem>
@@ -45,6 +58,7 @@ export function SettingsView({
       <section class="settings-body">
         {tab === 'voice' && <VoiceTab />}
         {tab === 'account' && <AccountTab session={session} onSession={onSession} />}
+        {tab === 'hotkeys' && <HotkeysTab />}
         {tab === 'app' && <AppTab session={session} />}
       </section>
       <button class="settings-close" title="Закрыть (Esc)" onClick={onClose}>
@@ -117,7 +131,13 @@ function VoiceTab() {
 
   useEffect(() => {
     if (!testing || !pipeline) return;
-    return pipeline.monitor(s.outputDeviceId);
+    // While you listen to yourself, the channel doesn't hear the test.
+    void voice.setMicTest(true);
+    const stop = pipeline.monitor(s.outputDeviceId);
+    return () => {
+      stop();
+      void voice.setMicTest(false);
+    };
   }, [testing, pipeline, s.outputDeviceId]);
 
   return (
@@ -188,7 +208,9 @@ function VoiceTab() {
           {testing ? 'Остановить проверку' : 'Проверить микрофон'}
         </button>
         <small class="muted">
-          {testing ? 'Ты слышишь себя так, как тебя слышат друзья. Лучше в наушниках.' : 'Полоска зелёная — голос передаётся.'}
+          {testing
+            ? 'Ты слышишь себя так, как тебя слышат друзья. В канале тебя сейчас не слышно.'
+            : 'Полоска зелёная — голос передаётся.'}
         </small>
       </div>
 
@@ -382,6 +404,7 @@ function AccountTab({ session, onSession }: { session: Session; onSession: (s: S
 // ---------------------------------------------------------------- app
 
 function AppTab({ session }: { session: Session }) {
+  const { theme } = useSettings();
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [version, setVersion] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -394,6 +417,28 @@ function AppTab({ session }: { session: Session }) {
   return (
     <div class="settings-page">
       <h2>Приложение</h2>
+
+      <h3>Цветовая тема</h3>
+      <div class="themes">
+        {THEMES.map((t) => (
+          <button
+            key={t.id}
+            class={`theme-swatch${theme === t.id ? ' active' : ''}`}
+            onClick={() => settings.update({ theme: t.id })}
+          >
+            <span
+              class="theme-preview"
+              style={{
+                background: `radial-gradient(90px 46px at 20% 0%, ${t.accent}55, transparent 70%), radial-gradient(90px 46px at 100% 100%, ${t.accent2}55, transparent 70%), #080b11`,
+                boxShadow: `inset 0 -3px 0 ${t.accent}`,
+              }}
+            />
+            <span class="theme-name">{t.name}</span>
+          </button>
+        ))}
+      </div>
+
+      <h3>Запуск</h3>
       <label class="switch-row">
         <span>
           Запускать вместе с Windows
@@ -447,5 +492,80 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
     >
       <span />
     </button>
+  );
+}
+
+// ---------------------------------------------------------------- hotkeys
+
+function HotkeysTab() {
+  const s = useSettings();
+  const [recording, setRecording] = useState<HotkeyAction | null>(null);
+  const [errors, setErrors] = useState(hotkeyErrors);
+  useEffect(() => onHotkeyErrors(() => setErrors({ ...hotkeyErrors })), []);
+
+  // Capture the next key combination while "recording".
+  useEffect(() => {
+    if (!recording) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.code === 'Escape') return setRecording(null);
+      if (e.code === 'Backspace' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        settings.update({ hotkeys: { ...settings.get().hotkeys, [recording]: null } });
+        return setRecording(null);
+      }
+      const accel = acceleratorFrom(e);
+      if (!accel) return; // only modifiers so far
+      // The same combo can't do two things.
+      const next = { ...settings.get().hotkeys };
+      for (const k of Object.keys(next)) if (next[k] === accel) next[k] = null;
+      next[recording] = accel;
+      settings.update({ hotkeys: next });
+      setRecording(null);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [recording]);
+
+  return (
+    <div class="settings-page">
+      <h2>Горячие клавиши</h2>
+      <p class="muted">
+        Работают везде, даже когда ты в игре. Лучше брать сочетания с Ctrl / Alt / Shift или F13–F24 —
+        одиночная клавиша перестанет печататься в других программах.
+      </p>
+
+      <div class="hotkeys">
+        {HOTKEY_ACTIONS.map(({ action, title, hint }) => {
+          const accel = s.hotkeys[action] ?? null;
+          const isRec = recording === action;
+          return (
+            <div key={action} class="hotkey-row">
+              <div class="hotkey-text">
+                <span class="hotkey-title">{title}</span>
+                <small class="muted">{hint}</small>
+                {accel && errors[action] && <small class="hotkey-error">{errors[action]}</small>}
+                {accel && !errors[action] && isRisky(accel) && (
+                  <small class="hotkey-warn">Одиночная клавиша — она не будет печататься в других программах</small>
+                )}
+              </div>
+              <button class={`keycap-btn${isRec ? ' recording' : ''}`} onClick={() => setRecording(isRec ? null : action)}>
+                {isRec ? 'Нажми сочетание…' : accel ? hotkeyLabel(accel) : 'Не назначено'}
+              </button>
+              {accel && !isRec && (
+                <button
+                  class="icon-btn"
+                  title="Убрать"
+                  onClick={() => settings.update({ hotkeys: { ...s.hotkeys, [action]: null } })}
+                >
+                  <CloseIcon size={16} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <small class="muted">Esc — отменить запись, Backspace — убрать сочетание.</small>
+    </div>
   );
 }

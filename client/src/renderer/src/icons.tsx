@@ -102,6 +102,13 @@ export const CloseIcon = (p: Props) => (
   </Icon>
 );
 
+export const PopoutIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M14 4h6v6M20 4l-8 8" />
+    <path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" />
+  </Icon>
+);
+
 export const EyeIcon = (p: Props) => (
   <Icon {...p}>
     <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />

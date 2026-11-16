@@ -3,9 +3,11 @@ import { App } from './App';
 import { hardwareH264, installCodecPreferences } from './codecPrefs';
 import './styles.css';
 import { settings } from './settings';
+import { installThemes } from './themes';
 import { voice } from './voice';
 
 void installCodecPreferences();
+installThemes();
 
 render(<App />, document.getElementById('app')!);
 

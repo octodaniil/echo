@@ -1,3 +1,4 @@
+import type { VNode } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { AchievementDef, Channel, Session } from '../../shared/types';
 import { Badge, loadCatalog, PinnedBadges } from './Achievements';
@@ -12,6 +13,7 @@ import {
   HeadphonesOffIcon,
   MicIcon,
   MicOffIcon,
+  PopoutIcon,
   PlusIcon,
   ScreenIcon,
   ScreenOffIcon,
@@ -19,6 +21,8 @@ import {
   UserPlusIcon,
   VolumeIcon,
 } from './icons';
+import { installHotkeys } from './hotkeys';
+import { openPopout, toggleFullscreen, type Popout } from './popout';
 import { useSettings } from './profile';
 import { ProfileView } from './ProfileView';
 import { ScreenPicker } from './ScreenPicker';
@@ -65,6 +69,7 @@ interface Person {
   joinedAt: number;
   viewers: string[];
   ns?: string | null;
+  quality?: VoiceState['quality'];
 }
 
 interface VolumeMenu {
@@ -110,6 +115,19 @@ export function Main({
       voice.clearError();
     }
   }, [v.error]);
+
+  useEffect(() => installHotkeys(), []);
+
+  // An admin dragged us into another channel.
+  useEffect(
+    () =>
+      window.echo.onMove(({ channelId, by }) => {
+        const target = channels.find((c) => c.id === channelId);
+        void voice.join(channelId);
+        showToast(`${by} перенёс тебя в «${target?.name ?? 'другой канал'}»`);
+      }),
+    [channels],
+  );
 
   // New achievement: special toast + sound.
   useEffect(
@@ -208,6 +226,13 @@ export function Main({
           onWatch={(channelId, userId) => void voice.watchUser(channelId, userId)}
           onProfile={setProfileId}
           onHover={setHover}
+          onMove={async (channelId, userId) => {
+            try {
+              await window.echo.moveUser(channelId, userId);
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : String(err));
+            }
+          }}
           onError={(m) => showToast(m)}
         />
 
@@ -347,6 +372,7 @@ function ChannelList({
   onWatch,
   onProfile,
   onHover,
+  onMove,
   onError,
 }: {
   channels: Channel[];
@@ -358,9 +384,12 @@ function ChannelList({
   onWatch: (channelId: number, userId: string) => void;
   onProfile: (userId: string) => void;
   onHover: (info: HoverInfo | null) => void;
+  onMove: (channelId: number, userId: string) => void;
   onError: (msg: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
+  // Admin drag & drop: which channel the dragged person hovers over.
+  const [dropTarget, setDropTarget] = useState<number | null>(null);
   const [name, setName] = useState('');
   // Single click opens the profile, double click on a streamer opens the stream.
   const clickTimer = useRef<number>();
@@ -414,7 +443,22 @@ function ChannelList({
         const people = peopleIn(c);
         return (
           <div key={c.id} class="channel-block">
-            <div class={`channel${active ? ' active' : ''}`} onClick={() => onJoin(c.id)} title="Зайти в канал">
+            <div
+              class={`channel${active ? ' active' : ''}${dropTarget === c.id ? ' drop' : ''}`}
+              onClick={() => onJoin(c.id)}
+              title="Зайти в канал"
+              onDragOver={(e) => {
+                if (!isAdmin || !e.dataTransfer?.types.includes('text/echo-user')) return;
+                e.preventDefault();
+                setDropTarget(c.id);
+              }}
+              onDragLeave={() => setDropTarget((t) => (t === c.id ? null : t))}
+              onDrop={(e) => {
+                const userId = e.dataTransfer?.getData('text/echo-user');
+                setDropTarget(null);
+                if (isAdmin && userId) onMove(c.id, userId);
+              }}
+            >
               <VolumeIcon size={17} />
               <span class="channel-name">{c.name}</span>
               {people.length > 0 && <span class="channel-count mono">{people.length}</span>}
@@ -437,6 +481,13 @@ function ChannelList({
                   <li
                     key={p.id}
                     class={`member${p.streaming && !p.isLocal ? ' can-watch' : ''}${p.speaking ? ' speaking' : ''}`}
+                    draggable={isAdmin}
+                    onDragStart={(e) => {
+                      onHover(null);
+                      e.dataTransfer?.setData('text/echo-user', p.id);
+                      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragEnd={() => setDropTarget(null)}
                     onClick={() => {
                       clearTimeout(clickTimer.current);
                       clickTimer.current = window.setTimeout(() => onProfile(p.id), p.streaming && !p.isLocal ? 230 : 0);
@@ -483,6 +534,31 @@ function VoiceStage({
 }) {
   const [picker, setPicker] = useState(false);
   const watched = state.watching ? people.find((p) => p.id === state.watching) : undefined;
+  // Stream shown in a separate OS window instead of the stage.
+  const [popped, setPopped] = useState<{ id: string; popout: Popout } | null>(null);
+  const watchedRef = useRef(watched);
+  watchedRef.current = watched;
+
+  // Close the pop-out when we stop watching that person (or switch to someone else).
+  useEffect(() => {
+    if (popped && popped.id !== state.watching) {
+      popped.popout.close();
+      setPopped(null);
+    }
+  }, [state.watching]);
+  useEffect(() => () => popped?.popout.close(), [popped]);
+
+  const popOutStream = () => {
+    if (!watched) return;
+    const id = watched.id;
+    const popout = openPopout(
+      `stream-${id}`,
+      `Echo — трансляция ${watched.nickname}`,
+      () => <PopoutStream participantId={id} nameOf={nameOf} getPerson={() => watchedRef.current} />,
+      () => setPopped((cur) => (cur?.popout === popout ? null : cur)),
+    );
+    if (popout) setPopped({ id, popout });
+  };
   const connected = state.status === 'connected';
   const myViewers = people.find((p) => p.isLocal)?.viewers ?? [];
 
@@ -510,7 +586,25 @@ function VoiceStage({
         </div>
       )}
 
-      {watched ? <StreamView person={watched} nameOf={nameOf} /> : null}
+      {watched && popped?.id === watched.id ? (
+        <div class="stream popped-placeholder">
+          <div>
+            <PopoutIcon size={28} />
+            <p>Трансляция {watched.nickname} открыта в отдельном окне</p>
+            <button
+              class="secondary small"
+              onClick={() => {
+                popped.popout.close();
+                setPopped(null);
+              }}
+            >
+              Вернуть сюда
+            </button>
+          </div>
+        </div>
+      ) : watched ? (
+        <StreamView person={watched} nameOf={nameOf} onPopout={popOutStream} />
+      ) : null}
 
       <div class={`tiles${watched ? ' strip' : ''}`}>
         {people.map((p) => {
@@ -620,24 +714,49 @@ function StreamSettingsButton() {
   );
 }
 
-/** Streamer's own picture-in-picture: what you send, plus what actually leaves the encoder. */
+/** Streamer's own picture-in-picture: drag it by the top bar, resize from the corner,
+ *  or open it as a separate window (snap, maximize, another monitor). */
 function SelfPreview({ viewers }: { viewers: number }) {
-  const video = useRef<HTMLVideoElement>(null);
   const [hidden, setHidden] = useState(false);
-  const [stats, setStats] = useState<OutboundStats | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [popout, setPopout] = useState<Popout | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ dx: number; dy: number } | null>(null);
 
-  useEffect(() => {
-    if (hidden) return;
-    const el = video.current;
-    const track = voice.localScreenTrack;
-    if (el && track) el.srcObject = new MediaStream([track]);
-    const t = window.setInterval(() => void voice.outboundStats().then(setStats), 1000);
-    return () => {
-      clearInterval(t);
-      if (el) el.srcObject = null;
-    };
-  }, [hidden]);
+  useEffect(() => () => popout?.close(), [popout]);
 
+  const onPointerDown = (e: PointerEvent) => {
+    const el = box.current;
+    if (!el || (e.target as HTMLElement).closest('button')) return;
+    const r = el.getBoundingClientRect();
+    drag.current = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: PointerEvent) => {
+    const el = box.current;
+    const parent = el?.offsetParent as HTMLElement | null;
+    if (!drag.current || !el || !parent) return;
+    const pr = parent.getBoundingClientRect();
+    const x = Math.min(Math.max(0, e.clientX - pr.left - drag.current.dx), pr.width - el.offsetWidth);
+    const y = Math.min(Math.max(0, e.clientY - pr.top - drag.current.dy), pr.height - el.offsetHeight);
+    setPos({ x, y });
+  };
+  const onPointerUp = () => (drag.current = null);
+
+  const popOut = () => {
+    const p = openPopout('self-preview', 'Echo — твой эфир', () => <SelfPreviewBody viewers={viewers} popout />, () =>
+      setPopout(null),
+    );
+    if (p) setPopout(p);
+  };
+
+  if (popout) {
+    return (
+      <button class="self-preview-collapsed" onClick={() => popout.close()} title="Вернуть превью в приложение">
+        <PopoutIcon size={16} /> Превью в отдельном окне
+      </button>
+    );
+  }
   if (hidden) {
     return (
       <button class="self-preview-collapsed" onClick={() => setHidden(false)} title="Показать превью трансляции">
@@ -645,21 +764,79 @@ function SelfPreview({ viewers }: { viewers: number }) {
       </button>
     );
   }
+  return (
+    <div
+      class="self-preview"
+      ref={box}
+      style={pos ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined}
+    >
+      <SelfPreviewBody
+        viewers={viewers}
+        bar={
+          <div
+            class="self-preview-top"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            title="Перетащи, чтобы подвинуть"
+          >
+            <span class="live-badge">LIVE</span>
+            <span class="tiny">Твой эфир</span>
+            <span class="spacer" />
+            <button class="icon-btn tiny" title="В отдельное окно" onClick={popOut}>
+              <PopoutIcon size={14} />
+            </button>
+            <button class="icon-btn tiny" title="Скрыть превью" onClick={() => setHidden(true)}>
+              <CloseIcon size={14} />
+            </button>
+          </div>
+        }
+      />
+    </div>
+  );
+}
+
+/** Video + live outbound stats; used in the in-app box and in the pop-out window. */
+function SelfPreviewBody({ viewers, bar, popout }: { viewers: number; bar?: VNode; popout?: boolean }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
+  const [stats, setStats] = useState<OutboundStats | null>(null);
+  const [liveViewers, setLiveViewers] = useState(viewers);
+
+  useEffect(() => {
+    const el = video.current;
+    const track = voice.localScreenTrack;
+    // Local frames only: no decoding, the compositor just draws them.
+    if (el && track) el.srcObject = new MediaStream([track]);
+    const t = window.setInterval(() => void voice.outboundStats().then(setStats), 1000);
+    const off = voice.subscribe((st) => setLiveViewers(st.participants.find((p) => p.isLocal)?.viewers.length ?? 0));
+    return () => {
+      clearInterval(t);
+      off();
+      if (el) el.srcObject = null;
+    };
+  }, []);
+
   const limited = stats?.limitation && stats.limitation !== 'none';
   return (
-    <div class="self-preview">
-      {/* Local frames only: no decoding, the compositor just draws them. */}
+    <div
+      class={`self-preview-body${popout ? ' popout' : ''}`}
+      ref={wrap}
+      onDblClick={() => popout && toggleFullscreen(wrap.current)}
+    >
       <video ref={video} autoPlay playsInline muted />
-      <div class="self-preview-top">
-        <span class="live-badge">LIVE</span>
-        <span class="tiny">Твой эфир</span>
-        <span class="spacer" />
-        <button class="icon-btn tiny" title="Скрыть превью" onClick={() => setHidden(true)}>
-          <CloseIcon size={14} />
-        </button>
-      </div>
+      {bar}
+      {popout && (
+        <div class="self-preview-top">
+          <span class="live-badge">LIVE</span>
+          <span class="tiny">Твой эфир · двойной клик — во весь экран</span>
+        </div>
+      )}
       <div class="self-preview-stats mono">
-        {stats?.paused || viewers === 0 ? (
+        <span class="sp-viewers">
+          <EyeIcon size={11} /> {liveViewers}
+        </span>
+        {stats?.paused || liveViewers === 0 ? (
           <span>Никто не смотрит — кодирование на паузе</span>
         ) : stats ? (
           <>
@@ -668,7 +845,11 @@ function SelfPreview({ viewers }: { viewers: number }) {
             </span>
             <span>{stats.fps ?? '—'} fps</span>
             <span>{stats.mbps ?? '—'} Мбит/с</span>
-            {limited && <span class="warn">упор: {stats.limitation === 'bandwidth' ? 'сеть' : stats.limitation === 'cpu' ? 'CPU' : stats.limitation}</span>}
+            {limited && (
+              <span class="warn">
+                упор: {stats.limitation === 'bandwidth' ? 'сеть' : stats.limitation === 'cpu' ? 'CPU' : stats.limitation}
+              </span>
+            )}
           </>
         ) : (
           <span>…</span>
@@ -678,7 +859,15 @@ function SelfPreview({ viewers }: { viewers: number }) {
   );
 }
 
-function StreamView({ person, nameOf }: { person: Person; nameOf: (id: string) => string }) {
+function StreamView({
+  person,
+  nameOf,
+  onPopout,
+}: {
+  person: Person;
+  nameOf: (id: string) => string;
+  onPopout: () => void;
+}) {
   const s = useSettings();
   const box = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
@@ -725,7 +914,78 @@ function StreamView({ person, nameOf }: { person: Person; nameOf: (id: string) =
             onInput={(e) => voice.setStreamVolume(person.id, Number(e.currentTarget.value))}
           />
         </label>
+        <button class="icon-btn" title="В отдельное окно" onClick={onPopout}>
+          <PopoutIcon size={18} />
+        </button>
         <button class="icon-btn" title="Во весь экран (двойной клик)" onClick={fullscreen}>
+          <FullscreenIcon size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** A friend's stream in its own window: same track, no extra decoding. */
+function PopoutStream({
+  participantId,
+  nameOf,
+  getPerson,
+}: {
+  participantId: string;
+  nameOf: (id: string) => string;
+  getPerson: () => Person | undefined;
+}) {
+  const s = useSettings();
+  const box = useRef<HTMLDivElement>(null);
+  const video = useRef<HTMLVideoElement>(null);
+  const [res, setRes] = useState('');
+  const [, rerender] = useState(0);
+  const person = getPerson();
+  const volume = s.streamVolumes[participantId] ?? 1;
+
+  // Viewer count etc. change over time; refresh a couple of times a second.
+  useEffect(() => voice.subscribe(() => rerender((n) => n + 1)), []);
+  useEffect(
+    () =>
+      voice.watchStreamTrack(participantId, (track) => {
+        const el = video.current;
+        if (!el) return;
+        el.srcObject = track ? new MediaStream([track]) : null;
+        void el.play().catch(() => {});
+      }),
+    [participantId],
+  );
+
+  return (
+    <div class="stream popout" ref={box} onDblClick={() => toggleFullscreen(box.current)}>
+      <video
+        ref={video}
+        autoPlay
+        playsInline
+        muted
+        onResize={(e) => {
+          const el = e.currentTarget;
+          if (el.videoWidth) setRes(`${el.videoWidth}×${el.videoHeight}`);
+        }}
+      />
+      <div class="stream-bar">
+        <span class="live-badge">LIVE</span>
+        <span class="stream-title">{person?.nickname ?? ''}</span>
+        {res && <span class="muted tiny mono">{res}</span>}
+        <ViewerChip ids={person?.viewers ?? []} nameOf={nameOf} />
+        <span class="spacer" />
+        <label class="stream-volume" title="Громкость трансляции">
+          <VolumeIcon size={16} />
+          <input
+            type="range"
+            min={0}
+            max={2}
+            step={0.01}
+            value={volume}
+            onInput={(e) => voice.setStreamVolume(participantId, Number(e.currentTarget.value))}
+          />
+        </label>
+        <button class="icon-btn" title="Во весь экран (двойной клик)" onClick={() => toggleFullscreen(box.current)}>
           <FullscreenIcon size={18} />
         </button>
       </div>
@@ -803,6 +1063,8 @@ interface HoverInfo {
   rect: DOMRect;
 }
 
+const QUALITY_SHORT: Record<string, string> = { excellent: 'отличная', good: 'хорошая', poor: 'плохая', lost: 'потеряна' };
+
 const NS_LABEL: Record<string, string> = { max: 'максимальный', ai: 'ИИ', standard: 'стандартный', off: 'выключен' };
 
 function sinceText(joinedAt: number): string {
@@ -830,6 +1092,9 @@ function HoverCard({ info }: { info: HoverInfo }) {
           {p.streaming && <span class="live-badge">LIVE</span>}
           {p.micMuted && <span class="tag">микрофон выключен</span>}
           {p.ns && <span class={`tag ns ns-${p.ns}`}>шумодав: {NS_LABEL[p.ns] ?? p.ns}</span>}
+          {!p.isLocal && p.quality && p.quality !== 'unknown' && (
+            <span class={`tag q q-${p.quality}`}>связь: {QUALITY_SHORT[p.quality]}</span>
+          )}
           <span class="muted tiny">
             {p.streaming && !p.isLocal ? 'клик — профиль · двойной — смотреть' : 'клик — профиль'}
           </span>

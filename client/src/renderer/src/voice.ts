@@ -33,6 +33,8 @@ export interface VoiceParticipant {
   viewers: string[];
   /** Their noise suppression mode (shared so friends can tell why someone is noisy). */
   ns: string | null;
+  /** LiveKit's estimate of their connection (packet loss / jitter show up here). */
+  quality: ConnectionQualityLevel;
 }
 
 export interface OutboundStats {
@@ -269,6 +271,7 @@ class VoiceClient {
           joinedAt: p.joinedAt?.getTime() ?? Date.now(),
           viewers: all.filter((q) => q !== p && watchingOf(q) === p.identity).map((q) => q.identity),
           ns: isLocal ? settings.get().noiseSuppression : (p.attributes?.ns ?? null),
+          quality: (p.connectionQuality ?? 'unknown') as ConnectionQualityLevel,
         };
       })
       .sort((a, b) => Number(b.isLocal) - Number(a.isLocal) || a.nickname.localeCompare(b.nickname));
@@ -293,7 +296,8 @@ class VoiceClient {
           p.nickname === n.nickname &&
           p.streaming === n.streaming &&
           p.viewers.join() === n.viewers.join() &&
-          p.ns === n.ns
+          p.ns === n.ns &&
+          p.quality === n.quality
         );
       });
     if (!same) this.set({ participants, watching });
@@ -363,8 +367,9 @@ class VoiceClient {
 
     const s = settings.get();
     const room = new Room({
-      // Only receive video in the resolution it is actually shown at.
-      adaptiveStream: true,
+      // Off on purpose: streams are only subscribed while someone watches them anyway, and
+      // adaptive stream would pause video shown in a pop-out window (another document).
+      adaptiveStream: false,
       // Stop sending video layers nobody is watching.
       dynacast: true,
       // Lets per-user volume go above 100% and keeps playback in one AudioContext.
@@ -395,6 +400,7 @@ class VoiceClient {
       })
       .on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, p: Participant) => {
         if (this.room === room && p === room.localParticipant) this.set({ quality: quality as ConnectionQualityLevel });
+        sync();
       })
       .on(RoomEvent.TrackUnpublished, sync)
       .on(RoomEvent.ParticipantAttributesChanged, (changed: Record<string, string>, p: Participant) => {
@@ -464,7 +470,7 @@ class VoiceClient {
         red: true,
         audioPreset: { maxBitrate: 48_000 },
       });
-      if (this.state.micMuted || this.state.deafened) await micTrack.mute();
+      if (this.state.micMuted || this.state.deafened || this.micTesting) await micTrack.mute();
 
       this.set({ status: 'connected' });
       void play('join');
@@ -751,6 +757,32 @@ class VoiceClient {
     }
   }
 
+  /** Calls back with someone's stream track whenever it (re)appears. Returns an unsubscribe. */
+  watchStreamTrack(participantId: string, cb: (track: MediaStreamTrack | null) => void): () => void {
+    const room = this.room;
+    if (!room) return () => {};
+    const emit = () => {
+      const pub = room.remoteParticipants.get(participantId)?.getTrackPublication(Track.Source.ScreenShare);
+      cb((pub?.track as RemoteTrack | undefined)?.mediaStreamTrack ?? null);
+    };
+    emit();
+    room.on(RoomEvent.TrackSubscribed, emit).on(RoomEvent.TrackUnsubscribed, emit);
+    return () => {
+      room.off(RoomEvent.TrackSubscribed, emit).off(RoomEvent.TrackUnsubscribed, emit);
+    };
+  }
+
+  private micTesting = false;
+
+  /** Mic check in settings: you hear yourself, the channel doesn't hear you meanwhile. */
+  async setMicTest(on: boolean) {
+    if (this.micTesting === on) return;
+    this.micTesting = on;
+    if (!this.micTrack) return;
+    if (on) await this.micTrack.mute();
+    else if (!this.state.micMuted && !this.state.deafened) await this.micTrack.unmute();
+  }
+
   /** Attaches someone's stream video to an element. Returns a detach function. */
   attachStream(participantId: string, el: HTMLVideoElement, onReady: () => void): () => void {
     const room = this.room;
@@ -785,7 +817,7 @@ class VoiceClient {
   private async setMic(muted: boolean, silent = false) {
     if (!silent && muted !== this.state.micMuted) void play(muted ? 'mute' : 'unmute');
     this.set({ micMuted: muted });
-    if (this.micTrack) await (muted ? this.micTrack.mute() : this.micTrack.unmute());
+    if (this.micTrack) await (muted || this.micTesting ? this.micTrack.mute() : this.micTrack.unmute());
     this.syncParticipants();
   }
 

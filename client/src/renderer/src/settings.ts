@@ -28,6 +28,10 @@ export interface Settings {
   streamBitrate: number | null;
   /** What to sacrifice when the encoder runs short: 'smooth' keeps fps, 'sharp' keeps resolution. */
   streamPriority: 'smooth' | 'sharp';
+  /** Color theme id (see themes.ts). */
+  theme: string;
+  /** Global hotkeys: action -> Electron accelerator. */
+  hotkeys: Record<string, string | null>;
   /** Interface sounds (join/leave/mute/...). */
   uiSounds: boolean;
   /** 0..1 */
@@ -50,6 +54,8 @@ export const defaults: Settings = {
   streamAudio: true,
   streamBitrate: null,
   streamPriority: 'smooth',
+  theme: 'neon',
+  hotkeys: {},
   uiSounds: true,
   uiSoundsVolume: 0.6,
 };

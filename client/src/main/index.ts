@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, session as electronSession, shell } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, session as electronSession, shell } from 'electron';
 import { join } from 'node:path';
 import type {
   AchievementDef,
@@ -56,6 +56,9 @@ function beginSession(s: ActiveSession) {
     },
     onAchievement(code) {
       send('achievement', code);
+    },
+    onMove(channelId, by) {
+      send('move', { channelId, by });
     },
   });
 }
@@ -176,6 +179,29 @@ function registerIpc() {
     }),
   );
 
+  handle('channels:move', (channelId: number, userId: string) =>
+    authed(requireSession(), `/api/channels/${channelId}/move`, { method: 'POST', body: { userId } }),
+  );
+
+  // ---------- global hotkeys ----------
+
+  // Registered system-wide so they work while a game has focus. Electron only reports
+  // key presses (no release), so every action is a toggle.
+  handle('hotkeys:set', (map: Record<string, string | null>) => {
+    globalShortcut.unregisterAll();
+    const result: Record<string, string | null> = {};
+    for (const [action, accel] of Object.entries(map)) {
+      if (!accel) continue;
+      try {
+        const ok = globalShortcut.register(accel, () => send('hotkey', action));
+        result[action] = ok ? null : 'Сочетание занято другой программой';
+      } catch {
+        result[action] = 'Это сочетание нельзя назначить';
+      }
+    }
+    return result;
+  });
+
   // ---------- screen sharing ----------
 
   handle('screen:sources', () => listSources(win?.getTitle() ?? 'Echo'));
@@ -228,12 +254,38 @@ function createWindow() {
   });
 
   win.once('ready-to-show', () => win?.show());
-  win.on('closed', () => (win = null));
+  win.on('closed', () => {
+    win = null;
+    // Pop-out stream windows can't live without the main window.
+    app.quit();
+  });
 
-  // Never navigate away or open popups inside the app; links go to the browser.
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  // Pop-out windows for streams (about:blank, same renderer process, so they can show
+  // the very same video track without decoding it twice). Everything else: links go to
+  // the browser, nothing navigates inside the app.
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (url === 'about:blank' && frameName.startsWith('echo-')) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 960,
+          height: 560,
+          minWidth: 320,
+          minHeight: 200,
+          backgroundColor: '#000000',
+          autoHideMenuBar: true,
+          title: 'Echo',
+          ...(app.isPackaged ? {} : { icon: join(__dirname, '../../build/icon.png') }),
+          webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false, spellcheck: false },
+        },
+      };
+    }
     if (url.startsWith('https://')) void shell.openExternal(url);
     return { action: 'deny' };
+  });
+  win.webContents.on('did-create-window', (child) => {
+    child.setMenuBarVisibility(false);
+    child.webContents.on('will-navigate', (e) => e.preventDefault());
   });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
 
@@ -269,3 +321,4 @@ app.whenReady().then(() => {
 app.setAppUserModelId('io.github.octodaniil.echo');
 
 app.on('window-all-closed', () => app.quit());
+app.on('will-quit', () => globalShortcut.unregisterAll());

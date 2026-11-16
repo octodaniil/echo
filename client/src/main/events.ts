@@ -8,6 +8,8 @@ export interface EventHandlers {
   onConnectionChange(connected: boolean): void;
   /** We just earned an achievement. */
   onAchievement(code: string): void;
+  /** An admin moved us to another channel. */
+  onMove(channelId: number, by: string): void;
 }
 
 /**
@@ -54,6 +56,10 @@ export function startEvents(session: ActiveSession, handlers: EventHandlers): ()
             }
             if (event === 'channels') handlers.onChannels(JSON.parse(data) as Channel[]);
             else if (event === 'achievement') handlers.onAchievement((JSON.parse(data) as { code: string }).code);
+            else if (event === 'move') {
+              const m = JSON.parse(data) as { channelId: number; by: string };
+              handlers.onMove(m.channelId, m.by);
+            }
             else if (event === 'kicked') {
               handlers.onUnauthorized('kicked');
               return;
