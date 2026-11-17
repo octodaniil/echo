@@ -116,6 +116,7 @@ export function ProfileView({
           class={`profile-banner${profile?.banner ? ' custom' : ''}`}
           style={profile?.banner ? { backgroundImage: `url("${bannerUrl(profile.id, profile.banner)}")` } : undefined}
         >
+          <span class="banner-tag mono">ДОСЬЕ // ID {userId.slice(0, 4).toUpperCase()}-{userId.slice(-2).toUpperCase()}</span>
           <button class="icon-btn profile-close" title="Закрыть" onClick={onClose}>
             <CloseIcon size={18} />
           </button>
@@ -145,6 +146,7 @@ export function ProfileView({
                 <StatusLine status={profile.status} class="profile-status" />
                 <UniqueTitles uniques={profile.uniques} />
                 <div class="profile-chips">
+                  <span class="chip-static">в Echo с {formatDate(profile.createdAt)}</span>
                   {profile.isAdmin && <span class="chip-static admin">Админ</span>}
                   {profile.isModerator && !profile.isAdmin && <span class="chip-static moderator">Модератор</span>}
                   <span class="chip-static">
@@ -177,12 +179,15 @@ export function ProfileView({
                       {p.points} / {p.nextLevelAt ?? '—'} очков
                     </span>
                   </div>
-                  <div class="rank-bar">
-                    <span style={{ width: `${Math.round(progress * 100)}%` }} />
+                  <div class="segbar" aria-label={`${Math.round(progress * 100)}%`}>
+                    {Array.from({ length: 20 }, (_, i) => (
+                      <i key={i} class={i < Math.round(progress * 20) ? 'on' : ''} />
+                    ))}
                   </div>
-                  <div class="rank-steps">
+                  <div class="rank-track" style={{ '--done': `${(p.tier / (RANK_NAMES.length - 1)) * 100}%` }}>
                     {RANK_NAMES.map((name, i) => (
-                      <span key={name} class={`rank-step${i < p.tier ? ' done' : i === p.tier ? ' now' : ''}`}>
+                      <span key={name} class={`rank-node${i < p.tier ? ' done' : i === p.tier ? ' now' : ''}`}>
+                        <b />
                         {name}
                       </span>
                     ))}
@@ -223,8 +228,8 @@ export function ProfileView({
                 <span class="stat-label">трансляций</span>
               </div>
               <div class="stat">
-                <span class="stat-value">{formatDate(profile.createdAt)}</span>
-                <span class="stat-label">в Echo с</span>
+                <span class="stat-value mono">{profile.streakDays ?? 0} дн</span>
+                <span class="stat-label">подряд в голосе</span>
               </div>
             </div>
 
@@ -290,10 +295,25 @@ export function ProfileView({
                                 {d.unique && <span class="one-of-one">1 из 1</span>}
                               </span>
                               <span class="ach-desc">{d.description}</span>
+                              {!has && !d.hidden && profile.progress?.[d.code] && (
+                                <span class="ach-progress">
+                                  <span class="ach-progress-bar">
+                                    <i
+                                      style={{
+                                        width: `${Math.round((profile.progress[d.code]!.value / profile.progress[d.code]!.target) * 100)}%`,
+                                      }}
+                                    />
+                                  </span>
+                                  <span class="mono">
+                                    {profile.progress[d.code]!.value} / {profile.progress[d.code]!.target} {profile.progress[d.code]!.unit}
+                                  </span>
+                                </span>
+                              )}
                               <span class={`ach-meta r-${d.rarity}`}>
                                 {RARITY_LABEL[d.rarity]}
                                 {has && ` · ${new Date(owned.get(d.code)!).toLocaleDateString('ru-RU')}`}
                                 {d.unique && !has && (d.holder ? ` · уже у ${d.holder}` : ' · ещё ни у кого')}
+                                {d.hidden && !has && ' · прогресс скрыт'}
                                 {isPinned && ' · закреплена'}
                                 {manage && (has ? ' · забрать' : ' · выдать')}
                               </span>

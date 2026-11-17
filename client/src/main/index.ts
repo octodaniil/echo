@@ -207,10 +207,10 @@ function registerIpc() {
     return updateUser(user);
   });
 
-  handle('me:set-avatar', async (data: Uint8Array) => {
+  handle('me:set-avatar', async (data: Uint8Array, type?: string) => {
     const { user } = await authed<{ user: User }>(requireSession(), '/api/me/avatar', {
       method: 'PUT',
-      raw: { data, type: 'image/webp' },
+      raw: { data, type: type === 'image/gif' ? 'image/gif' : 'image/webp' },
     });
     return updateUser(user);
   });

@@ -3668,3 +3668,14 @@ input[type='radio'] {
   font-size: 12.5px;
   gap: 5px;
 }
+
+/* achievement tabs wrap instead of being cut off on narrow profiles */
+.ach-tabs {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 2px;
+}
+/* neighbouring nameplates never touch */
+.members .member:not(.plate-none) {
+  margin: 3px 0;
+}

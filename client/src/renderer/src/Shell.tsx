@@ -30,6 +30,7 @@ import { bannerUrl, useSettings } from './profile';
 import { ProfileView } from './ProfileView';
 import { ScreenPicker } from './ScreenPicker';
 import { SettingsView } from './SettingsView';
+import { settings } from './settings';
 import { play } from './sounds';
 import { StreamOptions } from './StreamOptions';
 import { voice, type ConnectionStats, type OutboundStats, type VoiceState } from './voice';
@@ -173,8 +174,28 @@ export function Main({
   useEffect(() => {
     const el = document.getElementById('titlebar-info');
     if (!el) return;
-    el.textContent = v.status !== 'idle' && currentChannel ? `· ${currentChannel.name}` : '';
+    el.textContent = v.status !== 'idle' && currentChannel ? `// КАНАЛ ${currentChannel.name.toUpperCase()}` : '';
   }, [v.status, currentChannel?.name]);
+
+  // Ping and loss in the title bar while connected (one getStats every 5 s).
+  useEffect(() => {
+    const el = document.getElementById('titlebar-telemetry');
+    if (!el) return;
+    if (v.status !== 'connected') {
+      el.textContent = '';
+      return;
+    }
+    const tick = () =>
+      void voice.connectionStats().then((st) => {
+        el.innerHTML =
+          `<span>PING <b>${st.rttMs ?? '—'}${st.rttMs != null ? 'ms' : ''}</b></span>` +
+          `<span>ПОТЕРИ <b>${st.lossPct ?? 0}%</b></span>` +
+          (st.transport ? `<span>${st.transport.toUpperCase()}</span>` : '');
+      });
+    tick();
+    const t = window.setInterval(tick, 5000);
+    return () => clearInterval(t);
+  }, [v.status]);
 
   useEffect(() => {
     if (v.error) {
@@ -276,18 +297,23 @@ export function Main({
 
   // Count what the lists show (a stale server entry for ourselves is filtered out there).
   const totalOnline = channels.reduce((n, c) => n + peopleIn(c).length, 0);
+  const liveCount = channels.reduce((n, c) => n + peopleIn(c).filter((p) => p.streaming).length, 0);
 
   return (
     <div class="layout">
       <aside class="sidebar">
-        <header class="sidebar-header">
-          <div class="brand small">
-            <span class="brand-mark" />
-            <span class="brand-word">ECHO</span>
+        <header class="sidebar-header server-card">
+          <div class="server-card-main">
+            <div class="server-card-name">ECHO</div>
+            <div class="server-card-meta mono">
+              <span>
+                <span class="ok-dot" />
+                <b>{presence.length}</b> В СЕТИ
+              </span>
+              <span>{totalOnline} В ГОЛОСЕ</span>
+              {liveCount > 0 && <span class="hot">{liveCount} LIVE</span>}
+            </div>
           </div>
-          <span class="mono muted tiny" title="Сейчас в голосе">
-            {totalOnline > 0 ? `${totalOnline} в сети` : ''}
-          </span>
           {isAdmin && (
             <button class="icon-btn" title="Пригласить друга" onClick={() => void invite()}>
               <UserPlusIcon size={18} />
@@ -540,7 +566,9 @@ function ChannelList({
   return (
     <nav class="channels">
       <div class="section-title">
-        <span>Голосовые каналы</span>
+        <span>
+          КАНАЛЫ <b>{String(channels.length).padStart(2, '0')}</b>
+        </span>
         {isAdmin && (
           <button class="icon-btn tiny" title="Создать канал" onClick={() => setAdding(!adding)}>
             <PlusIcon size={14} />
@@ -561,9 +589,10 @@ function ChannelList({
         </form>
       )}
 
-      {channels.map((c) => {
+      {channels.map((c, idx) => {
         const active = voiceState.channelId === c.id && voiceState.status !== 'idle';
         const people = peopleIn(c);
+        const talking = people.some((p) => p.speaking);
         return (
           <div key={c.id} class="channel-block">
             <div
@@ -582,9 +611,17 @@ function ChannelList({
                 if (isAdmin && userId) onMove(c.id, userId);
               }}
             >
-              <VolumeIcon size={17} />
+              <span class="channel-freq mono">{String(idx + 1).padStart(2, '0')}</span>
               <span class="channel-name">{c.name}</span>
-              {people.length > 0 && <span class="channel-count mono">{people.length}</span>}
+              {talking && (
+                <span class="wave" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              )}
+              <span class="channel-count mono">{people.length > 0 ? people.length : '—'}</span>
               {isAdmin && (
                 <button
                   class="channel-delete"
@@ -676,7 +713,9 @@ function OnlineList({
   return (
     <div class="online-list">
       <div class="section-title">
-        <span>В сети — {users.length}</span>
+        <span>
+          В СЕТИ <b>{String(users.length).padStart(2, '0')}</b>
+        </span>
       </div>
       <ul class="members flat">
         {users.map((u) => {
@@ -739,6 +778,23 @@ function OnlineList({
   );
 }
 
+const NS_SHORT: Record<string, string> = { max: 'МАКС', ai: 'ИИ', standard: 'СТАНДАРТ', off: 'ВЫКЛ' };
+
+/** Time since we entered this channel (remounts per channel). */
+function CallTimer() {
+  const [since] = useState(() => Date.now());
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const secs = Math.floor((Date.now() - since) / 1000);
+  const hh = String(Math.floor(secs / 3600)).padStart(2, '0');
+  const mm = String(Math.floor((secs % 3600) / 60)).padStart(2, '0');
+  const ss = String(secs % 60).padStart(2, '0');
+  return <span>{`${hh}:${mm}:${ss}`}</span>;
+}
+
 /** Tile size class by how many people are in the channel. */
 type GridSize = 'xl' | 'l' | 'm' | 's';
 const gridSize = (n: number): GridSize => (n <= 2 ? 'xl' : n <= 4 ? 'l' : n <= 8 ? 'm' : 's');
@@ -792,9 +848,21 @@ function VoiceStage({
   return (
     <div class="voice-stage">
       <header class="stage-header">
-        <VolumeIcon size={18} />
-        <h2>{channel.name}</h2>
-        <span class="stage-meta mono">{people.length} в канале</span>
+        <div class="stage-title-block">
+          <div class="stage-sub mono">
+            <span class={`rec${connected ? '' : ' wait'}`}>{connected ? 'ЭФИР' : 'СВЯЗЬ…'}</span>
+            <CallTimer key={channel.id} />
+          </div>
+          <h2>{channel.name}</h2>
+        </div>
+        <div class="stage-sub mono stage-meta">
+          <span>
+            <b>{people.length}</b> В КАНАЛЕ
+          </span>
+          <span>
+            ШУМОДАВ <b>{NS_SHORT[settings.get().noiseSuppression] ?? '—'}</b>
+          </span>
+        </div>
       </header>
 
       {state.sharing && (
@@ -853,6 +921,8 @@ function VoiceStage({
               }
               title={canWatch ? 'Смотреть трансляцию' : 'Профиль · ПКМ — громкость'}
             >
+              <span class="br tl" aria-hidden="true" />
+              <span class="br brr" aria-hidden="true" />
               <Avatar
                 id={p.id}
                 name={p.nickname}
@@ -881,6 +951,15 @@ function VoiceStage({
               </div>
               {!watched && p.activity && <div class="tile-game">🎮 {p.activity.game}</div>}
               {!watched && !p.activity && p.status?.text && <StatusLine status={p.status} class="tile-game idle" />}
+              {!watched && (
+                <div class="tile-data mono">
+                  <span>{rankName(p.prestige).toUpperCase()}</span>
+                  {p.quality && p.quality !== 'unknown' && (
+                    <span class={`q-${p.quality}`}>● {QUALITY_SHORT[p.quality]?.toUpperCase()}</span>
+                  )}
+                  {p.ns && <span>{NS_SHORT[p.ns] ?? p.ns}</span>}
+                </div>
+              )}
               {!watched && <PinnedBadges codes={p.pinned} size={20} />}
               {p.streaming && (
                 <span class="live-badge tile-live">
@@ -900,12 +979,22 @@ function VoiceStage({
 
       <div class="stage-controls">
         <button
-          class={`round-btn${state.micMuted ? ' off' : ''}`}
+          class={`round-btn${state.micMuted ? ' off' : ' on'}`}
           title="Микрофон"
           onClick={() => void voice.toggleMic()}
         >
           {state.micMuted ? <MicOffIcon /> : <MicIcon />}
+          <span class="rb-label">{state.micMuted ? 'ВЫКЛ' : 'МИКРО'}</span>
         </button>
+        <button
+          class={`round-btn${state.deafened ? ' off' : ''}`}
+          title="Звук"
+          onClick={() => void voice.toggleDeafen()}
+        >
+          {state.deafened ? <HeadphonesOffIcon /> : <HeadphonesIcon />}
+          <span class="rb-label">ЗВУК</span>
+        </button>
+        <span class="dock-sep" />
         <button
           class={`round-btn${state.sharing ? ' live' : ''}`}
           title={state.sharing ? 'Остановить трансляцию' : 'Транслировать экран или окно'}
@@ -913,9 +1002,12 @@ function VoiceStage({
           onClick={() => (state.sharing ? void voice.stopScreenShare() : setPicker(true))}
         >
           <ScreenIcon />
+          <span class="rb-label">{state.sharing ? 'СТОП' : 'ЭФИР'}</span>
         </button>
+        <span class="dock-sep" />
         <button class="round-btn danger" title="Отключиться" onClick={() => void voice.leave()}>
           <HangUpIcon />
+          <span class="rb-label">ВЫЙТИ</span>
         </button>
       </div>
 

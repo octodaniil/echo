@@ -113,6 +113,10 @@ export interface Profile extends User {
   gameSeconds: number;
   gamesCount: number;
   topGames: { game: string; seconds: number }[];
+  /** Days in a row with voice activity (ending today or yesterday). */
+  streakDays?: number;
+  /** How far along countable, not yet earned achievements are (never secret ones). */
+  progress?: Record<string, { value: number; target: number; unit: string }>;
   achievements: { code: string; awardedAt: number }[];
   pinned: string[];
   prestige: Prestige;

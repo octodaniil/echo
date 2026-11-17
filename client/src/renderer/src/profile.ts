@@ -55,15 +55,25 @@ export function useSettings(): Settings {
   return s;
 }
 
-/** Center-crops an image file to a square and encodes a 128x128 WebP. */
-export async function makeAvatar(file: File): Promise<Uint8Array> {
+const AVATAR_MAX = 2 * 1024 * 1024;
+
+/**
+ * Prepares an avatar. Animated GIF/WebP go up as they are (the circle crop happens when
+ * shown); still images are center-cropped to a 256x256 WebP (sharp on big profile rings).
+ */
+export async function makeAvatar(file: File): Promise<{ data: Uint8Array; type: string }> {
+  const animated = file.type === 'image/gif' || (file.type === 'image/webp' && (await isAnimatedWebp(file)));
+  if (animated) {
+    if (file.size > AVATAR_MAX) throw new Error('Анимированный аватар больше 2 МБ — сожми его или возьми короче');
+    return { data: new Uint8Array(await file.arrayBuffer()), type: file.type };
+  }
   const bitmap = await createImageBitmap(file);
   const side = Math.min(bitmap.width, bitmap.height);
-  const canvas = new OffscreenCanvas(128, 128);
+  const canvas = new OffscreenCanvas(256, 256);
   const ctx = canvas.getContext('2d')!;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 128, 128);
+  ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 256, 256);
   bitmap.close();
   const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.86 });
-  return new Uint8Array(await blob.arrayBuffer());
+  return { data: new Uint8Array(await blob.arrayBuffer()), type: 'image/webp' };
 }

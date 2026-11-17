@@ -43,7 +43,7 @@ const api = {
   createInvite: () => call<Invite>('invites:create'),
 
   updateProfile: (patch: { nickname: string }) => call<Session>('me:update', patch),
-  setAvatar: (webp: Uint8Array) => call<Session>('me:set-avatar', webp),
+  setAvatar: (data: Uint8Array, type = 'image/webp') => call<Session>('me:set-avatar', data, type),
   removeAvatar: () => call<Session>('me:remove-avatar'),
   setBanner: (data: Uint8Array, type: string) => call<Session>('me:set-banner', data, type),
   removeBanner: () => call<Session>('me:remove-banner'),

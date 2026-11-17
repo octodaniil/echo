@@ -20,6 +20,9 @@ export class MicPipeline {
   private readonly gate = this.ctx.createGain();
   private readonly analyser = this.ctx.createAnalyser();
   private readonly samples = new Float32Array(512);
+  /** Input levels of the last 3 s (one per 20 ms tick), for the noise floor. */
+  private readonly recent = new Float32Array(150).fill(-60);
+  private recentPos = 0;
 
   private stream: MediaStream | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
@@ -145,13 +148,21 @@ export class MicPipeline {
     const db = Math.max(-100, 10 * Math.log10(sum / this.samples.length + 1e-12));
     this.level = db;
 
-    // Noise floor: drops quickly, rises slowly (so speech doesn't drag it up).
-    this.noiseFloor = db < this.noiseFloor ? this.noiseFloor + (db - this.noiseFloor) * 0.3 : this.noiseFloor + (db - this.noiseFloor) * 0.004;
-    this.noiseFloor = Math.min(-30, Math.max(-90, this.noiseFloor));
-    // Auto: well above the room noise, but never below -50 dB (quiet rooms with AGC
-    // still sit around -55..-65 dB) and never above -30 dB (normal speech is louder).
+    // Noise floor = the quietest moment of the last 3 s ("minimum statistics"): speech
+    // always has gaps, steady noise doesn't. The old slowly-rising average crept up during
+    // long silences (Windows/Chrome auto-gain keeps boosting a quiet mic), pushed the
+    // threshold above normal speech and the mic seemed dead until a loud knock.
+    this.recent[this.recentPos] = db;
+    this.recentPos = (this.recentPos + 1) % this.recent.length;
+    let min = 0;
+    for (const v of this.recent) if (v < min) min = v;
+    // Never learn from moments when the gate is open (that's speech, not noise).
+    if (!this.gateOpen || min < this.noiseFloor) this.noiseFloor += (min - this.noiseFloor) * 0.05;
+    this.noiseFloor = Math.min(-40, Math.max(-90, this.noiseFloor));
+    // Auto: well above the room noise, but within -52..-42 dB: quiet rooms with AGC sit
+    // around -55..-65 dB, and even quiet speech is louder than -42 dB.
     this.threshold = s.sensitivityAuto
-      ? Math.min(-30, Math.max(-50, this.noiseFloor + 20))
+      ? Math.min(-42, Math.max(-52, this.noiseFloor + 15))
       : s.sensitivityDb;
 
     const now = performance.now();

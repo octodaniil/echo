@@ -63,9 +63,14 @@ export function App() {
     if (session === undefined) return;
     const splash = document.getElementById('splash');
     if (!splash) return;
-    splash.classList.add('gone');
-    const t = window.setTimeout(() => splash.remove(), 400);
-    return () => clearTimeout(t);
+    // Keep it up for at least ~1.8 s from launch: the app loads so fast it only flashed.
+    const wait = Math.max(0, 1800 - performance.now());
+    const t1 = window.setTimeout(() => splash.classList.add('gone'), wait);
+    const t2 = window.setTimeout(() => splash.remove(), wait + 400);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [session === undefined]);
 
   if (session === undefined) return null;

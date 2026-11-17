@@ -1,4 +1,4 @@
-import type { JSX } from 'preact';
+import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Session, UpdateStatus } from '../../shared/types';
 import { Avatar } from './Avatar';
@@ -44,21 +44,27 @@ export function SettingsView({
       <nav class="settings-nav">
         <div class="settings-nav-title">Настройки</div>
         <NavItem active={tab === 'voice'} onClick={() => setTab('voice')}>
+          <i class="nav-num">01</i>
           Голос и звук
         </NavItem>
         <NavItem active={tab === 'account'} onClick={() => setTab('account')}>
+          <i class="nav-num">02</i>
           Профиль
         </NavItem>
         <NavItem active={tab === 'style'} onClick={() => setTab('style')}>
+          <i class="nav-num">03</i>
           Стиль
         </NavItem>
         <NavItem active={tab === 'hotkeys'} onClick={() => setTab('hotkeys')}>
+          <i class="nav-num">04</i>
           Горячие клавиши
         </NavItem>
         <NavItem active={tab === 'games'} onClick={() => setTab('games')}>
+          <i class="nav-num">05</i>
           Игры
         </NavItem>
         <NavItem active={tab === 'app'} onClick={() => setTab('app')}>
+          <i class="nav-num">06</i>
           Приложение
         </NavItem>
       </nav>
@@ -78,7 +84,7 @@ export function SettingsView({
   );
 }
 
-function NavItem({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
+function NavItem({ active, onClick, children }: { active: boolean; onClick: () => void; children: ComponentChildren }) {
   return (
     <button class={`settings-nav-item${active ? ' active' : ''}`} onClick={onClick}>
       {children}
@@ -350,7 +356,10 @@ function AccountTab({ session, onSession }: { session: Session; onSession: (s: S
     const f = e.currentTarget.files?.[0];
     e.currentTarget.value = '';
     if (!f) return;
-    void run(async () => window.echo.setAvatar(await makeAvatar(f)), 'Аватар обновлён');
+    void run(async () => {
+      const { data, type } = await makeAvatar(f);
+      return window.echo.setAvatar(data, type);
+    }, f.type === 'image/gif' ? 'Анимированный аватар обновлён' : 'Аватар обновлён');
   };
 
   const onBanner = (e: JSX.TargetedEvent<HTMLInputElement>) => {
@@ -383,7 +392,7 @@ function AccountTab({ session, onSession }: { session: Session; onSession: (s: S
               Удалить
             </button>
           )}
-          <small class="muted">Картинка обрежется до квадрата</small>
+          <small class="muted">Картинка обрежется до круга. GIF и анимированный WebP — как есть, до 2 МБ</small>
         </div>
       </div>
 
