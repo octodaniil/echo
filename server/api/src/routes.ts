@@ -14,6 +14,7 @@ import {
   listAchievements,
   MAX_PINNED,
   prestigeOf,
+  progressOf,
   uniquesMap,
   revoke,
   setPinned,
@@ -56,6 +57,7 @@ const idParam = z.object({ id: z.coerce.number().int().positive() });
 const avatarPath = (userId: string) => join(avatarDir, `${userId}.webp`);
 const bannerPath = (userId: string) => join(avatarDir, `${userId}.banner`);
 const BANNER_MAX = 4 * 1024 * 1024;
+const AVATAR_MAX = 2 * 1024 * 1024;
 
 /** Real image type from magic bytes (never trust the declared content-type). */
 function imageType(data: unknown): string | null {
@@ -130,6 +132,7 @@ export async function registerRoutes(app: FastifyInstance) {
           .map((a) => definition(a.code))
           .filter((d) => d?.hidden),
         pinned: getPinned(id),
+        progress: progressOf(id),
         prestige: prestigeOf(id),
         uniques: uniquesMap().get(id) ?? [],
         style: styleOf(id),
@@ -214,12 +217,15 @@ export async function registerRoutes(app: FastifyInstance) {
     app.addContentTypeParser(type, { parseAs: 'buffer', bodyLimit: BANNER_MAX }, (_req, body, done) => done(null, body));
   }
 
-  // Clients send a ready 128x128 WebP; we only check it really is one.
+  // Static avatars arrive as a ready square WebP; animated ones as the original GIF or
+  // animated WebP (cropped to a circle by the client when shown). We check the real format.
   app.put('/api/me/avatar', { preHandler: requireUser }, async (req) => {
     const data = req.body as Buffer;
-    if (imageType(data) !== 'image/webp') throw new HttpError(400, 'Нужна картинка в формате WebP');
-    if (data.length > 512 * 1024) throw new HttpError(413, 'Аватар слишком большой');
+    const type = imageType(data);
+    if (type !== 'image/webp' && type !== 'image/gif') throw new HttpError(400, 'Нужна картинка WebP или GIF');
+    if (data.length > AVATAR_MAX) throw new HttpError(413, 'Аватар больше 2 МБ');
     await writeFile(avatarPath(req.user.id), data);
+    queries.setAvatarType.run(type, req.user.id);
     queries.setAvatarVersion.run(Date.now(), req.user.id);
     broadcastChannels();
     broadcastPresence();
@@ -240,8 +246,9 @@ export async function registerRoutes(app: FastifyInstance) {
     const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
     try {
       const data = await readFile(avatarPath(id));
+      const type = (queries.avatarType.get(id) as { avatar_type: string | null } | undefined)?.avatar_type;
       return reply
-        .header('content-type', 'image/webp')
+        .header('content-type', type ?? 'image/webp')
         .header('cache-control', 'public, max-age=31536000, immutable')
         .send(data);
     } catch {

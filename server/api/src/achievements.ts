@@ -601,3 +601,48 @@ export function startAchievementClock() {
     for (const [id, since] of streams) if (now - since >= 3 * HOUR * 1000) award(id, 'stream_3h');
   }, 60_000).unref();
 }
+
+// ---------- progress toward countable achievements (never for secret ones) ----------
+
+export interface Progress {
+  value: number;
+  target: number;
+  unit: string;
+}
+
+export function progressOf(userId: string): Record<string, Progress> {
+  const st = getStats(userId);
+  const days = (q.days.all(userId) as unknown[]).length;
+  const nights = (q.nights.get(userId) as { n: number }).n;
+  const pairs = q.partners.get(userId, userId) as { n: number; best: number };
+  const others = Math.max(0, (q.userCount.get() as { n: number }).n - 1);
+  const h = (secs: number) => Math.floor(secs / HOUR);
+  const out: Record<string, Progress> = {};
+  const add = (code: string, value: number, target: number, unit: string) => {
+    if (!byCode.get(code)?.hidden) out[code] = { value: Math.min(value, target), target, unit };
+  };
+  add('voice_1h', Math.floor(st.voiceSeconds / 60), 60, 'мин');
+  add('voice_10h', h(st.voiceSeconds), 10, 'ч');
+  add('voice_100h', h(st.voiceSeconds), 100, 'ч');
+  add('pioneer_100h', h(st.voiceSeconds), 100, 'ч');
+  add('voice_500h', h(st.voiceSeconds), 500, 'ч');
+  add('game_10h', h(st.gameSeconds), 10, 'ч');
+  add('game_100h', h(st.gameSeconds), 100, 'ч');
+  add('game_500h', h(st.gameSeconds), 500, 'ч');
+  add('one_game_100h', h(st.bestGameSeconds), 100, 'ч');
+  add('collector', st.gamesCount, 5, 'игр');
+  add('collector_15', st.gamesCount, 15, 'игр');
+  add('first_museum', st.gamesCount, 25, 'игр');
+  add('stream_10', st.streamsCount, 10, 'эфиров');
+  add('stream_50', st.streamsCount, 50, 'эфиров');
+  add('stream_200', st.streamsCount, 200, 'эфиров');
+  add('streak_7', st.streakDays, 7, 'дн подряд');
+  add('streak_30', st.streakDays, 30, 'дн подряд');
+  add('iron_streak', st.streakDays, 30, 'дн подряд');
+  add('regular_100', days, 100, 'дн');
+  add('night_owl_10', nights, 10, 'ночей');
+  add('met_5', pairs.n, 5, 'чел');
+  if (others >= 3) add('met_all', pairs.n, others, 'чел');
+  add('duo_100h', h(pairs.best), 100, 'ч');
+  return out;
+}
