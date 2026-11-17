@@ -58,6 +58,16 @@ export function App() {
     return () => offs.forEach((off) => off());
   }, []);
 
+  // Fade the splash out once we know whether to show login or the app.
+  useEffect(() => {
+    if (session === undefined) return;
+    const splash = document.getElementById('splash');
+    if (!splash) return;
+    splash.classList.add('gone');
+    const t = window.setTimeout(() => splash.remove(), 400);
+    return () => clearTimeout(t);
+  }, [session === undefined]);
+
   if (session === undefined) return null;
   if (session === null) {
     return (

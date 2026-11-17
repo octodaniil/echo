@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { AchievementDef, Activity, Profile, Rarity } from '../../shared/types';
-import { Badge, categories, RARITY_LABEL, TIER_NAMES, UniqueTitles, useCatalog } from './Achievements';
+import { Badge, categories, RARITY_LABEL, UniqueTitles, useCatalog } from './Achievements';
+import { levelProgress, lookVars, RANK_NAMES } from './look';
+import { StatusLine } from './Status';
+import { GameCover } from './GameCover';
 import { Avatar, Nick } from './Avatar';
 import { bannerUrl } from './profile';
 import { CloseIcon } from './icons';
@@ -34,6 +37,7 @@ export function ProfileView({
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manage, setManage] = useState(false);
+  const [tab, setTab] = useState<string | null>(null);
   const isMe = userId === meId;
 
   const load = () =>
@@ -70,10 +74,16 @@ export function ProfileView({
         Number(owned.has(b.code)) - Number(owned.has(a.code)) ||
         RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity),
     );
-  const groups = (categories.length ? categories : [{ id: 'all', title: 'Ачивки' }]).map((c) => ({
-    ...c,
-    items: sortInGroup(catalog.filter((a) => c.id === 'all' || a.category === c.id)),
-  }));
+  const groups = [
+    { id: 'all', title: 'Все' },
+    ...categories,
+  ]
+    .map((c) => ({
+      ...c,
+      items: sortInGroup(catalog.filter((a) => c.id === 'all' || a.category === c.id)),
+    }))
+    .filter((g) => g.items.length > 0);
+  const current = groups.find((g) => g.id === tab) ?? groups[0];
 
   const togglePin = async (code: string) => {
     if (!isMe || !owned.has(code) || !profile) return;
@@ -97,11 +107,11 @@ export function ProfileView({
   };
 
   const p = profile?.prestige;
-  const progress = p && p.nextTierAt ? (p.points - p.tierFloor) / (p.nextTierAt - p.tierFloor) : 1;
+  const progress = levelProgress(p);
 
   return (
     <div class="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div class={`modal profile tier-${tier}${holo ? ' holo' : ''}`}>
+      <div class={`modal profile rank-${tier}${holo ? ' holo' : ''}`} style={lookVars(profile?.style)}>
         <div
           class={`profile-banner${profile?.banner ? ' custom' : ''}`}
           style={profile?.banner ? { backgroundImage: `url("${bannerUrl(profile.id, profile.banner)}")` } : undefined}
@@ -122,14 +132,17 @@ export function ProfileView({
                   name={profile.nickname}
                   avatar={profile.avatar}
                   size={96}
-                  tier={tier}
+                  prestige={profile.prestige}
+                  look={profile.style}
+                  status={profile.status?.state}
                   uniques={profile.uniques}
                 />
               </span>
               <div class="profile-id">
                 <h2>
-                  <Nick name={profile.nickname} tier={tier} />
+                  <Nick name={profile.nickname} look={profile.style} />
                 </h2>
+                <StatusLine status={profile.status} class="profile-status" />
                 <UniqueTitles uniques={profile.uniques} />
                 <div class="profile-chips">
                   {profile.isAdmin && <span class="chip-static admin">Админ</span>}
@@ -152,19 +165,32 @@ export function ProfileView({
             </header>
 
             {p && (
-              <div class={`rank-card rank-t${p.tier}`}>
-                <div class="rank-level mono">{p.level}</div>
+              <div class="rank-card">
+                <div class="rank-level mono">
+                  <span class="rank-level-label">LVL</span>
+                  {p.level}
+                </div>
                 <div class="rank-body">
                   <div class="rank-title">
-                    {TIER_NAMES[p.tier]} <span class="muted mono">· {p.points} очков</span>
+                    <span class="rank-name">{RANK_NAMES[p.tier]}</span>
+                    <span class="muted mono">
+                      {p.points} / {p.nextLevelAt ?? '—'} очков
+                    </span>
                   </div>
                   <div class="rank-bar">
-                    <span style={{ width: `${Math.round(Math.min(1, progress) * 100)}%` }} />
+                    <span style={{ width: `${Math.round(progress * 100)}%` }} />
+                  </div>
+                  <div class="rank-steps">
+                    {RANK_NAMES.map((name, i) => (
+                      <span key={name} class={`rank-step${i < p.tier ? ' done' : i === p.tier ? ' now' : ''}`}>
+                        {name}
+                      </span>
+                    ))}
                   </div>
                   <div class="muted tiny">
-                    {p.nextTierAt
-                      ? `До ранга «${TIER_NAMES[p.tier + 1]}» — ${p.nextTierAt - p.points} очков`
-                      : 'Высший ранг'}
+                    {p.nextTierLevel
+                      ? `Уровень ${p.level + 1} — через ${(p.nextLevelAt ?? 0) - p.points} очков · ранг «${RANK_NAMES[p.tier + 1]}» с ${p.nextTierLevel} уровня`
+                      : `Высший ранг · следующий уровень через ${(p.nextLevelAt ?? 0) - p.points} очков`}
                   </div>
                 </div>
               </div>
@@ -172,8 +198,14 @@ export function ProfileView({
 
             {activity && (
               <div class="now-playing">
-                <span class="now-playing-dot" />
-                Сейчас играет в <b>{activity.game}</b>
+                <GameCover game={activity.game} width={110} />
+                <span class="now-playing-text">
+                  <span class="now-playing-label">
+                    <span class="now-playing-dot" />
+                    Сейчас играет
+                  </span>
+                  <b>{activity.game}</b>
+                </span>
               </div>
             )}
 
@@ -202,6 +234,7 @@ export function ProfileView({
                 <div class="top-games">
                   {profile.topGames.map((g, i) => (
                     <div key={g.game} class="top-game">
+                      <GameCover game={g.game} width={64} />
                       <span class="top-game-rank mono">#{i + 1}</span>
                       <span class="top-game-name">{g.game}</span>
                       <span class="muted mono tiny">{hours(g.seconds)}</span>
@@ -221,18 +254,25 @@ export function ProfileView({
                   </button>
                 )}
               </div>
-              {groups
-                .filter((g) => g.items.length > 0)
-                .map((g) => (
-                  <div key={g.id} class="ach-group">
-                    <div class="ach-group-title">
-                      {g.title}
-                      <span class="muted mono">
-                        {g.items.filter((a) => owned.has(a.code)).length}/{g.items.length}
-                      </span>
-                    </div>
+              <div class="ach-tabs" role="tablist">
+                {groups.map((g) => (
+                  <button
+                    key={g.id}
+                    role="tab"
+                    class={`ach-tab${current?.id === g.id ? ' active' : ''}${g.id === 'special' ? ' special' : ''}`}
+                    onClick={() => setTab(g.id)}
+                  >
+                    {g.title}
+                    <span class="ach-tab-count mono">
+                      {g.items.filter((a) => owned.has(a.code)).length}/{g.items.length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {current && (
+                  <div key={current.id} class="ach-group fade-in">
                     <div class="ach-grid">
-                      {g.items.map((d) => {
+                      {current.items.map((d) => {
                         const has = owned.has(d.code);
                         const isPinned = pinned.includes(d.code);
                         const clickable = manage || (isMe && has);
@@ -263,7 +303,7 @@ export function ProfileView({
                       })}
                     </div>
                   </div>
-                ))}
+              )}
               {error && <div class="error">{error}</div>}
             </section>
           </>

@@ -12,6 +12,9 @@ import type {
   Session,
   SessionEndReason,
   VoiceCredentials,
+  CosmeticsCatalog,
+  Look,
+  UserStatus,
 } from '../shared/types';
 
 async function call<T>(name: string, ...args: unknown[]): Promise<T> {
@@ -49,6 +52,9 @@ const api = {
     call<{ catalog: AchievementDef[]; categories?: AchievementCategory[] }>('ach:catalog'),
   getProfile: (userId: string) => call<Profile>('profile:get', userId),
   setPinned: (codes: string[]) => call<string[]>('me:pinned', codes),
+  getCosmetics: () => call<CosmeticsCatalog>('cosmetics:get'),
+  setLook: (patch: Partial<Look>) => call<Look>('me:style', patch),
+  setStatus: (status: UserStatus) => call<UserStatus>('me:status', status),
   awardAchievement: (userId: string, code: string) => call<unknown>('ach:award', userId, code),
   revokeAchievement: (userId: string, code: string) => call<unknown>('ach:revoke', userId, code),
   onAchievement: (cb: (a: { code: string; def?: AchievementDef }) => void) => on('achievement', cb),
@@ -78,6 +84,7 @@ const api = {
   selectScreenSource: (id: string, audio: boolean) => call<void>('screen:select', id, audio),
 
   getAutostart: () => call<boolean>('app:get-autostart'),
+  idleSeconds: () => call<number>('app:idle-seconds'),
   setAutostart: (enabled: boolean) => call<boolean>('app:set-autostart', enabled),
 
   getAppInfo: () => call<{ version: string; update: { version: string } | null }>('app:info'),

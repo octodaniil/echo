@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, session as electronSession, shell } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, powerMonitor, session as electronSession, shell } from 'electron';
 import { join } from 'node:path';
 import type {
   AchievementDef,
@@ -10,6 +10,9 @@ import type {
   SessionEndReason,
   User,
   VoiceCredentials,
+  CosmeticsCatalog,
+  Look,
+  UserStatus,
 } from '../shared/types';
 import { authed, request } from './api';
 import { startEvents } from './events';
@@ -238,6 +241,13 @@ function registerIpc() {
   handle('profile:get', async (id: string) =>
     (await authed<{ profile: Profile }>(requireSession(), `/api/users/${encodeURIComponent(id)}/profile`)).profile,
   );
+  handle('cosmetics:get', () => authed<CosmeticsCatalog>(requireSession(), '/api/cosmetics'));
+  handle('me:style', async (patch: Partial<Look>) =>
+    (await authed<{ style: Look }>(requireSession(), '/api/me/style', { method: 'PATCH', body: patch })).style,
+  );
+  handle('me:status', async (status: UserStatus) =>
+    (await authed<{ status: UserStatus }>(requireSession(), '/api/me/status', { method: 'PUT', body: status })).status,
+  );
   handle('me:pinned', async (codes: string[]) =>
     (await authed<{ pinned: string[] }>(requireSession(), '/api/me/pinned', { method: 'PUT', body: { codes } })).pinned,
   );
@@ -280,6 +290,7 @@ function registerIpc() {
 
   // ---------- app ----------
 
+  handle('app:idle-seconds', () => powerMonitor.getSystemIdleTime());
   handle('app:get-autostart', () => app.isPackaged && app.getLoginItemSettings().openAtLogin);
   handle('app:set-autostart', (enabled: boolean) => {
     if (!app.isPackaged) throw new Error('Автозапуск работает только в установленной версии');
@@ -308,9 +319,12 @@ function createWindow() {
     minWidth: 760,
     minHeight: 480,
     show: false,
-    backgroundColor: '#111214',
+    backgroundColor: '#05070b',
     autoHideMenuBar: true,
     title: 'Echo',
+    // Our own title bar (drawn by the page); Windows keeps its native min/max/close buttons.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#05070b', symbolColor: '#9fb0c4', height: 32 },
     // Packaged builds take the icon from the .exe.
     ...(app.isPackaged ? {} : { icon: join(__dirname, '../../build/icon.png') }),
     webPreferences: {

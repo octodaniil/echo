@@ -7,6 +7,7 @@ import type { MicPipeline } from './mic';
 import { bannerUrl, makeAvatar, makeBanner, useSettings } from './profile';
 import { settings, type NoiseSuppressionMode } from './settings';
 import { play } from './sounds';
+import { StyleTab } from './StyleTab';
 import { THEMES } from './themes';
 import {
   acceleratorFrom,
@@ -19,7 +20,7 @@ import {
 } from './hotkeys';
 import { voice } from './voice';
 
-type Tab = 'voice' | 'hotkeys' | 'games' | 'account' | 'app';
+type Tab = 'voice' | 'hotkeys' | 'games' | 'account' | 'style' | 'app';
 
 export function SettingsView({
   session,
@@ -48,6 +49,9 @@ export function SettingsView({
         <NavItem active={tab === 'account'} onClick={() => setTab('account')}>
           Профиль
         </NavItem>
+        <NavItem active={tab === 'style'} onClick={() => setTab('style')}>
+          Стиль
+        </NavItem>
         <NavItem active={tab === 'hotkeys'} onClick={() => setTab('hotkeys')}>
           Горячие клавиши
         </NavItem>
@@ -61,6 +65,7 @@ export function SettingsView({
       <section class="settings-body">
         {tab === 'voice' && <VoiceTab />}
         {tab === 'account' && <AccountTab session={session} onSession={onSession} />}
+        {tab === 'style' && <StyleTab session={session} />}
         {tab === 'hotkeys' && <HotkeysTab />}
         {tab === 'games' && <GamesTab />}
         {tab === 'app' && <AppTab session={session} />}

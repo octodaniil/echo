@@ -1,7 +1,10 @@
 import type { ComponentChildren, VNode } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import type { AchievementDef, Activity, Channel, PresenceUser, Prestige, Session } from '../../shared/types';
-import { Badge, LevelChip, PinnedBadges, reloadCatalog, TIER_NAMES, tierOf, UniqueTitles } from './Achievements';
+import type { AchievementDef, Activity, Channel, Look, PresenceUser, Prestige, Session, UserStatus } from '../../shared/types';
+import { Badge, LevelChip, PinnedBadges, reloadCatalog, UniqueTitles } from './Achievements';
+import { lookVars, rankName } from './look';
+import { StatusLine, StatusMenu, useMyStatus } from './Status';
+import { coverUrl, GameCover } from './GameCover';
 import { Avatar, Nick } from './Avatar';
 import {
   CloseIcon,
@@ -59,6 +62,8 @@ interface ProfileLite {
   uniques?: string[];
   role?: 'admin' | 'moderator' | null;
   banner?: number | null;
+  style?: Look;
+  status?: UserStatus;
 }
 
 /** A person shown in the UI: server profile merged with live voice data when we share a channel. */
@@ -80,6 +85,8 @@ interface Person {
   uniques?: string[];
   role?: 'admin' | 'moderator' | null;
   banner?: number | null;
+  style?: Look;
+  status?: UserStatus;
 }
 
 interface VolumeMenu {
@@ -125,6 +132,8 @@ export function Main({
           uniques: m.uniques,
           role: m.role,
           banner: m.banner,
+          style: m.style,
+          status: m.status,
         });
     // Presence is the freshest source (also covers people who are online but not in voice).
     for (const u of presence)
@@ -137,11 +146,16 @@ export function Main({
         uniques: u.uniques,
         role: u.role,
         banner: u.banner,
+        style: u.style,
+        status: u.status,
       });
     map.set(me.id, { ...map.get(me.id), nickname: me.nickname, avatar: me.avatar ?? null });
     return map;
   }, [channels, presence, me]);
-  const myPrestige = profiles.get(me.id)?.prestige;
+  const myProfile = profiles.get(me.id);
+  const myPrestige = myProfile?.prestige;
+  const [statusMenu, setStatusMenu] = useState(false);
+  useMyStatus(myProfile?.status, v.status !== 'idle');
 
   // Keep the tray menu in sync (mute / deafen labels, current channel).
   useEffect(() => {
@@ -154,6 +168,13 @@ export function Main({
       .catch(() => {});
   }, [v.micMuted, v.deafened, v.status, currentChannel?.name]);
   const nameOf = (id: string) => profiles.get(id)?.nickname ?? 'кто-то';
+
+  // Current channel in the title bar.
+  useEffect(() => {
+    const el = document.getElementById('titlebar-info');
+    if (!el) return;
+    el.textContent = v.status !== 'idle' && currentChannel ? `· ${currentChannel.name}` : '';
+  }, [v.status, currentChannel?.name]);
 
   useEffect(() => {
     if (v.error) {
@@ -220,6 +241,8 @@ export function Main({
           uniques: prof?.uniques ?? server?.uniques,
           role: prof?.role ?? server?.role,
           banner: prof?.banner ?? server?.banner,
+          style: prof?.style ?? server?.style,
+          status: prof?.status ?? server?.status,
           streaming: p.streaming || (server?.streaming ?? false),
           joinedAt: server?.joinedAt || p.joinedAt,
         };
@@ -246,6 +269,8 @@ export function Main({
         uniques: profiles.get(m.id)?.uniques ?? m.uniques,
         role: profiles.get(m.id)?.role ?? m.role,
         banner: profiles.get(m.id)?.banner ?? m.banner,
+        style: profiles.get(m.id)?.style ?? m.style,
+        status: profiles.get(m.id)?.status ?? m.status,
       }));
   };
 
@@ -322,25 +347,38 @@ export function Main({
         )}
 
         <footer class="userbar">
-          <button class="userbar-me" title="Мой профиль" onClick={() => setProfileId(me.id)}>
+          <button class="userbar-me" title="Статус и профиль" onClick={() => setStatusMenu(!statusMenu)}>
             <Avatar
               id={me.id}
               name={me.nickname}
               avatar={me.avatar}
               size={34}
-              tier={tierOf(myPrestige)}
-              uniques={profiles.get(me.id)?.uniques}
+              prestige={myPrestige}
+              look={myProfile?.style}
+              status={myProfile?.status?.state}
+              uniques={myProfile?.uniques}
             />
             <span class="userbar-name">
               <span class="nick">
-                <Nick name={me.nickname} tier={tierOf(myPrestige)} />
-                <LevelChip prestige={myPrestige} />
+                <Nick name={me.nickname} look={myProfile?.style} />
               </span>
-              <span class="muted tiny">
-                {isAdmin ? 'админ' : profiles.get(me.id)?.role === 'moderator' ? 'модератор' : 'в сети'}
-              </span>
+              <StatusLine
+                status={myProfile?.status}
+                fallback={isAdmin ? 'админ' : myProfile?.role === 'moderator' ? 'модератор' : 'в сети'}
+              />
             </span>
           </button>
+          {statusMenu && (
+            <StatusMenu
+              current={myProfile?.status}
+              onProfile={() => {
+                setStatusMenu(false);
+                setProfileId(me.id);
+              }}
+              onClose={() => setStatusMenu(false)}
+              onError={(m) => showToast(m)}
+            />
+          )}
           <button
             class={`icon-btn${v.micMuted ? ' off' : ''}`}
             title={v.micMuted ? 'Включить микрофон' : 'Выключить микрофон'}
@@ -565,7 +603,8 @@ function ChannelList({
                 {people.map((p) => (
                   <li
                     key={p.id}
-                    class={`member${p.streaming && !p.isLocal ? ' can-watch' : ''}${p.speaking ? ' speaking' : ''}`}
+                    class={`member plate-${p.style?.plate ?? 'none'}${p.streaming && !p.isLocal ? ' can-watch' : ''}${p.speaking ? ' speaking' : ''}`}
+                    style={lookVars(p.style)}
                     draggable={isAdmin}
                     onDragStart={(e) => {
                       onHover(null);
@@ -593,15 +632,21 @@ function ChannelList({
                       avatar={p.avatar}
                       size={22}
                       speaking={p.speaking}
-                      tier={tierOf(p.prestige)}
+                      prestige={p.prestige}
+                      look={p.style}
+                      status={p.status?.state}
                       uniques={p.uniques}
                     />
                     <span class="member-main">
                       <span class="member-name">
-                        <Nick name={p.nickname} tier={tierOf(p.prestige)} />
-                        <LevelChip prestige={p.prestige} />
+                        <Nick name={p.nickname} look={p.style} />
+                        <LevelChip prestige={p.prestige} look={p.style} />
                       </span>
-                      {p.activity && <span class="member-game">🎮 {p.activity.game}</span>}
+                      {p.activity ? (
+                        <span class="member-game">🎮 {p.activity.game}</span>
+                      ) : (
+                        p.status?.text && <StatusLine status={p.status} class="member-game idle" />
+                      )}
                     </span>
                     {p.streaming && <span class="live-badge">LIVE</span>}
                     {p.micMuted && <MicOffIcon size={14} class="member-muted" />}
@@ -651,27 +696,39 @@ function OnlineList({
             uniques: u.uniques,
             role: u.role,
             banner: u.banner,
+            style: u.style,
+            status: u.status,
           };
           return (
             <li
               key={u.id}
-              class="member"
+              class={`member plate-${u.style?.plate ?? 'none'}`}
+              style={lookVars(u.style)}
               onClick={() => onProfile(u.id)}
               onMouseEnter={(e) =>
                 onHover({ person, channel: '', rect: (e.currentTarget as HTMLElement).getBoundingClientRect() })
               }
               onMouseLeave={() => onHover(null)}
             >
-              <Avatar id={u.id} name={u.nickname} avatar={u.avatar} size={24} tier={tierOf(u.prestige)} uniques={u.uniques} />
+              <Avatar
+                id={u.id}
+                name={u.nickname}
+                avatar={u.avatar}
+                size={24}
+                prestige={u.prestige}
+                look={u.style}
+                status={u.status?.state}
+                uniques={u.uniques}
+              />
               <span class="member-main">
                 <span class="member-name">
-                  <Nick name={u.nickname} tier={tierOf(u.prestige)} />
-                  <LevelChip prestige={u.prestige} />
+                  <Nick name={u.nickname} look={u.style} />
+                  <LevelChip prestige={u.prestige} look={u.style} />
                 </span>
                 {u.activity ? (
                   <span class="member-game">🎮 {u.activity.game}</span>
                 ) : (
-                  <span class="member-game idle">в сети</span>
+                  <StatusLine status={u.status} fallback="в сети" class="member-game idle" />
                 )}
               </span>
             </li>
@@ -681,6 +738,11 @@ function OnlineList({
     </div>
   );
 }
+
+/** Tile size class by how many people are in the channel. */
+type GridSize = 'xl' | 'l' | 'm' | 's';
+const gridSize = (n: number): GridSize => (n <= 2 ? 'xl' : n <= 4 ? 'l' : n <= 8 ? 'm' : 's');
+const TILE_AVATAR: Record<GridSize, number> = { xl: 112, l: 92, m: 76, s: 52 };
 
 function VoiceStage({
   channel,
@@ -771,13 +833,20 @@ function VoiceStage({
         <StreamView person={watched} nameOf={nameOf} onPopout={popOutStream} />
       ) : null}
 
-      <div class={`tiles${watched ? ' strip' : ''}`}>
+      <div class={`tiles ${watched ? 'strip' : `grid-${gridSize(people.length)}`}`}>
         {people.map((p) => {
           const canWatch = p.streaming && !p.isLocal;
           return (
             <div
               key={p.id}
-              class={`tile tier-${tierOf(p.prestige)}${p.speaking ? ' speaking' : ''}${canWatch ? ' streaming' : ''}${state.watching === p.id ? ' watched' : ''}`}
+              class={`tile rank-${p.prestige?.tier ?? 0}${p.speaking ? ' speaking' : ''}${canWatch ? ' streaming' : ''}${state.watching === p.id ? ' watched' : ''}`}
+              style={{
+                ...lookVars(p.style),
+                ...(!watched && p.activity && coverUrl(p.activity.game)
+                  ? { '--cover': `url("${coverUrl(p.activity.game)}")` }
+                  : {}),
+              }}
+              data-cover={!watched && p.activity && coverUrl(p.activity.game) ? '' : undefined}
               onContextMenu={(e) => onPersonMenu(e, p)}
               onClick={() =>
                 canWatch ? (state.watching === p.id ? voice.unwatch() : voice.watch(p.id)) : onProfile(p.id)
@@ -788,18 +857,30 @@ function VoiceStage({
                 id={p.id}
                 name={p.nickname}
                 avatar={p.avatar}
-                size={watched ? 40 : 76}
+                size={watched ? 40 : TILE_AVATAR[gridSize(people.length)]}
                 speaking={p.speaking}
-                tier={tierOf(p.prestige)}
+                prestige={p.prestige}
+                look={p.style}
+                status={p.status?.state}
                 uniques={p.uniques}
+                animated={!watched && people.length <= 8}
               />
               <div class="tile-name">
-                <Nick name={p.nickname} tier={tierOf(p.prestige)} />
-                <LevelChip prestige={p.prestige} />
+                <Nick name={p.nickname} look={p.style} />
                 {p.isLocal && <span class="muted"> (ты)</span>}
-                {p.micMuted && <MicOffIcon size={14} class="member-muted" />}
+                {p.micMuted ? (
+                  <MicOffIcon size={14} class="member-muted" />
+                ) : (
+                  <span class={`eq${p.speaking ? ' on' : ''}`} aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                )}
               </div>
               {!watched && p.activity && <div class="tile-game">🎮 {p.activity.game}</div>}
+              {!watched && !p.activity && p.status?.text && <StatusLine status={p.status} class="tile-game idle" />}
               {!watched && <PinnedBadges codes={p.pinned} size={20} />}
               {p.streaming && (
                 <span class="live-badge tile-live">
@@ -1260,7 +1341,7 @@ function HoverCard({ info }: { info: HoverInfo }) {
   // To the right of the sidebar row, kept inside the window.
   const top = Math.min(rect.top - 6, window.innerHeight - (banner ? 230 : 140));
   return (
-    <div class={`hovercard${banner ? ' with-banner' : ''} tier-${tierOf(p.prestige)}`} style={{ left: rect.right + 10, top }}>
+    <div class={`hovercard${banner ? ' with-banner' : ''}`} style={{ left: rect.right + 10, top, ...lookVars(p.style) }}>
       {banner && <div class="hovercard-banner" style={{ backgroundImage: `url("${banner}")` }} />}
       <Avatar
         id={p.id}
@@ -1268,25 +1349,32 @@ function HoverCard({ info }: { info: HoverInfo }) {
         avatar={p.avatar}
         size={44}
         speaking={p.speaking}
-        tier={tierOf(p.prestige)}
+        prestige={p.prestige}
+        look={p.style}
+        status={p.status?.state}
         uniques={p.uniques}
       />
       <div class="hovercard-body">
         <div class="hovercard-name">
-          <Nick name={p.nickname} tier={tierOf(p.prestige)} />
+          <Nick name={p.nickname} look={p.style} />
           {p.isLocal && <span class="muted"> (ты)</span>}
         </div>
         <UniqueTitles uniques={p.uniques} />
         {p.role && <span class={`role-chip ${p.role}`}>{p.role === 'admin' ? 'Админ' : 'Модератор'}</span>}
-        {p.prestige && p.prestige.points > 0 && (
-          <div class={`hovercard-rank rank-t${p.prestige.tier}`}>
-            {TIER_NAMES[p.prestige.tier]} · уровень {p.prestige.level}
+        {p.prestige && (
+          <div class="hovercard-rank">
+            {rankName(p.prestige)} · уровень {p.prestige.level}
           </div>
         )}
+        {p.status && (p.status.text || p.status.state !== 'online') && <StatusLine status={p.status} class="hovercard-status" />}
         {p.joinedAt > 0 && <div class="muted tiny">{sinceText(p.joinedAt)}</div>}
         {p.activity && (
           <div class="hovercard-game">
-            🎮 играет в <b>{p.activity.game}</b> · {durationText(p.activity.since)}
+            <GameCover game={p.activity.game} width={60} />
+            <span>
+              играет в <b>{p.activity.game}</b>
+              <span class="muted"> · {durationText(p.activity.since)}</span>
+            </span>
           </div>
         )}
         <PinnedBadges codes={p.pinned} size={18} />

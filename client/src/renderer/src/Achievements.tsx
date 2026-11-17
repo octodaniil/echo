@@ -1,6 +1,7 @@
 import type { JSX } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import type { AchievementCategory, AchievementDef, Prestige, Rarity } from '../../shared/types';
+import type { AchievementCategory, AchievementDef, Look, Prestige, Rarity } from '../../shared/types';
+import { lookVars, RANK_NAMES } from './look';
 
 // ---------- catalog (loaded once per session) ----------
 
@@ -55,6 +56,12 @@ export const RARITY_LABEL: Record<Rarity, string> = {
 export const UNIQUE_INFO: Record<string, { title: string; icon: string }> = {
   founder: { title: 'Основатель Echo', icon: 'crown' },
   beta_tester: { title: 'Первый бета-тестер', icon: 'flask' },
+  first_stream_ever: { title: 'Первый эфир', icon: 'broadcast' },
+  pioneer_100h: { title: 'Первопроходец', icon: 'flag' },
+  first_singularity: { title: 'Сингулярность №1', icon: 'singularity' },
+  first_secret: { title: 'Взломщик', icon: 'key' },
+  first_museum: { title: 'Музей', icon: 'stack' },
+  iron_streak: { title: 'Несгибаемый', icon: 'flame' },
 };
 
 /** Small holographic emblem pinned to the avatar of a unique-achievement holder. */
@@ -197,15 +204,19 @@ export function PinnedBadges({ codes, size = 22 }: { codes: string[] | undefined
 
 // ---------- prestige ----------
 
-export const TIER_NAMES = ['Новичок', 'Бронза', 'Серебро', 'Золото', 'Легенда'];
+export const TIER_NAMES = RANK_NAMES;
 
 export const tierOf = (p: Prestige | undefined) => p?.tier ?? 0;
 
-/** Small level chip next to a nickname, colored by rank. */
-export function LevelChip({ prestige }: { prestige: Prestige | undefined }) {
-  if (!prestige || prestige.points <= 0) return null;
+/** Small level chip next to a nickname (for lists with tiny avatars), in the ring color. */
+export function LevelChip({ prestige, look }: { prestige: Prestige | undefined; look?: Look }) {
+  if (!prestige) return null;
   return (
-    <span class={`lvl lvl-t${prestige.tier}`} title={`${TIER_NAMES[prestige.tier]} · уровень ${prestige.level} · ${prestige.points} очков`}>
+    <span
+      class={`lvl lvl-t${prestige.tier}`}
+      style={lookVars(look)}
+      title={`${RANK_NAMES[prestige.tier]} · уровень ${prestige.level} · ${prestige.points} очков`}
+    >
       {prestige.level}
     </span>
   );
@@ -283,6 +294,89 @@ Object.assign(ICONS, {
     <>
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
       <path d="m9 12 2 2 4-4" />
+    </>
+  ),
+  flag: <path d="M5 21V4M5 4h11l-2 4 2 4H5" />,
+  singularity: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3a9 9 0 0 1 9 9M12 21a9 9 0 0 1-9-9M19 5.5A9.5 4 30 0 1 5 18.5" />
+    </>
+  ),
+  key: (
+    <>
+      <circle cx="7.5" cy="15.5" r="4.5" />
+      <path d="m10.7 12.3 9.3-9.3M17 6l3 3M14.5 8.5l2 2" />
+    </>
+  ),
+  flame: <path d="M12 22c4 0 7-2.7 7-7 0-4-3-6.5-4-10-2 2-2.5 4-2.5 6-1.5-1-2.5-2.5-2.5-4C7 9 5 12 5 15c0 4.3 3 7 7 7Z" />,
+  home: (
+    <>
+      <path d="m3 11 9-8 9 8" />
+      <path d="M5 10v11h14V10M10 21v-6h4v6" />
+    </>
+  ),
+  owl: (
+    <>
+      <path d="M5 4l3 3h8l3-3v9a7 7 0 0 1-14 0Z" />
+      <circle cx="9" cy="11" r="1.6" />
+      <circle cx="15" cy="11" r="1.6" />
+      <path d="m11 15 1 1 1-1" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
+    </>
+  ),
+  medal: (
+    <>
+      <circle cx="12" cy="15" r="6" />
+      <path d="M8.5 10 6 2h4l2 5 2-5h4l-2.5 8M12 12.5l.9 1.8 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3Z" />
+    </>
+  ),
+  heart: <path d="M12 20s-8-4.8-8-10.5A4.5 4.5 0 0 1 12 6.6a4.5 4.5 0 0 1 8 2.9C20 15.2 12 20 12 20Z" />,
+  mic: (
+    <>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8" />
+    </>
+  ),
+  tv: (
+    <>
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="m8 3 4 4 4-4" />
+    </>
+  ),
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+    </>
+  ),
+  ghost: (
+    <>
+      <path d="M5 21V10a7 7 0 0 1 14 0v11l-2.5-2-2.3 2-2.2-2-2.2 2-2.3-2Z" />
+      <path d="M9.5 10h.01M14.5 10h.01" />
+    </>
+  ),
+  terminal: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="m7 9 3 3-3 3M13 15h4" />
+    </>
+  ),
+  cat: (
+    <>
+      <path d="M5 4l3 4h8l3-4v10a7 7 0 0 1-14 0Z" />
+      <path d="M9.5 12h.01M14.5 12h.01M10.5 15.5h3M3 14h3M18 14h3" />
+    </>
+  ),
+  sparkle: (
+    <>
+      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z" />
+      <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z" />
     </>
   ),
 });

@@ -71,9 +71,17 @@ async function context(): Promise<AudioContext> {
   return ctx;
 }
 
+/** "Do not disturb": cues about other people are silenced, your own actions still click. */
+let quiet = false;
+const NOISY: Cue[] = ['userJoin', 'userLeave', 'viewerJoin', 'watchStart', 'achievement'];
+export function setQuiet(on: boolean) {
+  quiet = on;
+}
+
 export async function play(cue: Cue) {
   const s = settings.get();
   if (!s.uiSounds || s.uiSoundsVolume <= 0) return;
+  if (quiet && NOISY.includes(cue)) return;
   const c = await context();
   const { notes, type, gain } = CUES[cue];
   const t0 = c.currentTime + 0.01;

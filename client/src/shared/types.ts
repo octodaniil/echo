@@ -26,14 +26,51 @@ export interface AchievementDef {
   holder?: string | null;
 }
 
-/** Rank from achievements: points by rarity -> level and tier (0 none … 4 legend). */
+/** Rank from achievements: points by rarity -> level; rank by level (0 Сигнал … 4 Сингулярность). */
 export interface Prestige {
   points: number;
   level: number;
   tier: 0 | 1 | 2 | 3 | 4;
+  /** Points where the current level starts and the next begins (progress ring). */
+  levelFloor?: number;
+  nextLevelAt?: number;
+  /** Level where the next rank begins (null at the top). */
+  nextTierLevel?: number | null;
   /** Points needed for the next tier (null at the top). */
   nextTierAt: number | null;
   tierFloor: number;
+}
+
+export type CosmeticSlot = 'ring' | 'frame' | 'name' | 'plate';
+
+/** Equipped cosmetics (ids rendered by the client). */
+export interface Look {
+  ring: string;
+  frame: string;
+  name: string;
+  plate: string;
+}
+
+export interface Cosmetic {
+  id: string;
+  slot: CosmeticSlot;
+  title: string;
+  unlock: { level?: number; achievement?: string; unique?: boolean };
+  unlocked: boolean;
+}
+
+export interface CosmeticsCatalog {
+  slots: { id: CosmeticSlot; title: string }[];
+  items: Cosmetic[];
+  style: Look;
+}
+
+export type StatusState = 'online' | 'away' | 'dnd';
+
+export interface UserStatus {
+  state: StatusState;
+  text: string;
+  emoji: string;
 }
 
 export interface Activity {
@@ -51,6 +88,8 @@ export interface PresenceUser {
   uniques?: string[];
   role?: 'admin' | 'moderator' | null;
   banner?: number | null;
+  style?: Look;
+  status?: UserStatus;
 }
 
 export type UpdateStatus =
@@ -78,6 +117,8 @@ export interface Profile extends User {
   pinned: string[];
   prestige: Prestige;
   uniques?: string[];
+  style?: Look;
+  status?: UserStatus;
   /** Full definitions of hidden achievements this person has earned. */
   revealed?: AchievementDef[];
 }
@@ -92,6 +133,8 @@ export interface ChannelMember {
   uniques?: string[];
   role?: 'admin' | 'moderator' | null;
   banner?: number | null;
+  style?: Look;
+  status?: UserStatus;
   streaming: boolean;
   joinedAt: number;
 }
