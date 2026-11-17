@@ -18,6 +18,7 @@ import {
   revoke,
   setPinned,
 } from './achievements.ts';
+import { equip, parseStatus, setStatus, SLOTS, styleContext, styleOf } from './cosmetics.ts';
 import { createInvite, HttpError, publicUser, redeemInvite, requireAdmin, requireUser } from './auth.ts';
 import { config } from './config.ts';
 import { avatarDir, queries, type Channel, type User } from './db.ts';
@@ -131,8 +132,50 @@ export async function registerRoutes(app: FastifyInstance) {
         pinned: getPinned(id),
         prestige: prestigeOf(id),
         uniques: uniquesMap().get(id) ?? [],
+        style: styleOf(id),
+        status: parseStatus((queries.styleStatus.get(id) as { status: string } | undefined)?.status),
       },
     };
+  });
+
+  // ---------- cosmetics & status ----------
+
+  app.get('/api/cosmetics', { preHandler: requireUser }, async (req) => ({
+    slots: SLOTS,
+    items: styleContext().catalog(req.user.id),
+    style: styleOf(req.user.id),
+  }));
+
+  app.patch('/api/me/style', { preHandler: requireUser }, async (req) => {
+    const body = parse(
+      z.object({ ring: z.string(), frame: z.string(), name: z.string(), plate: z.string() }).partial(),
+      req.body,
+    );
+    let style;
+    try {
+      style = equip(req.user.id, body);
+    } catch (err) {
+      throw new HttpError(400, (err as Error).message);
+    }
+    broadcastChannels();
+    broadcastPresence();
+    return { style };
+  });
+
+  app.put('/api/me/status', { preHandler: requireUser }, async (req) => {
+    const body = parse(
+      z.object({
+        state: z.enum(['online', 'away', 'dnd']),
+        text: z.string().trim().max(64, 'Статус: максимум 64 символа').default(''),
+        emoji: z.string().max(16).default(''),
+      }),
+      req.body,
+    );
+    const status = parseStatus(JSON.stringify(body));
+    setStatus(req.user.id, status);
+    broadcastChannels();
+    broadcastPresence();
+    return { status };
   });
 
   app.put('/api/me/pinned', { preHandler: requireUser }, async (req) => {

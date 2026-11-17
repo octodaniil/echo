@@ -85,6 +85,9 @@ addColumn('is_moderator', 'is_moderator INTEGER NOT NULL DEFAULT 0');
 // Profile banner: version (cache key) and stored image type.
 addColumn('banner_version', 'banner_version INTEGER');
 addColumn('banner_type', 'banner_type TEXT');
+// Equipped cosmetics (JSON) and status (JSON: state, text, emoji).
+addColumn('style', "style TEXT NOT NULL DEFAULT '{}'");
+addColumn('status', "status TEXT NOT NULL DEFAULT '{}'");
 
 export const avatarDir = join(dirname(config.dbPath), 'avatars');
 mkdirSync(avatarDir, { recursive: true });
@@ -127,8 +130,11 @@ export const queries = {
   renameUser: db.prepare('UPDATE users SET nickname = ? WHERE id = ?'),
   setAvatarVersion: db.prepare('UPDATE users SET avatar_version = ? WHERE id = ?'),
   setModerator: db.prepare('UPDATE users SET is_moderator = ? WHERE id = ?'),
+  setStyle: db.prepare('UPDATE users SET style = ? WHERE id = ?'),
+  setStatus: db.prepare('UPDATE users SET status = ? WHERE id = ?'),
+  styleStatus: db.prepare('SELECT style, status FROM users WHERE id = ?'),
   setBanner: db.prepare('UPDATE users SET banner_version = ?, banner_type = ? WHERE id = ?'),
-  userProfiles: db.prepare('SELECT id, nickname, avatar_version, pinned, is_admin, is_moderator, banner_version FROM users'),
+  userProfiles: db.prepare('SELECT id, nickname, avatar_version, pinned, is_admin, is_moderator, banner_version, style, status FROM users'),
   userById: db.prepare(
     'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type FROM users WHERE id = ?',
   ),

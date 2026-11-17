@@ -1,7 +1,7 @@
 import { db, queries, type User } from './db.ts';
 
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'unique';
-export type Category = 'voice' | 'stream' | 'games' | 'social' | 'special';
+export type Category = 'special' | 'voice' | 'games' | 'stream' | 'social' | 'secret';
 
 export interface AchievementDef {
   code: string;
@@ -20,41 +20,78 @@ export interface AchievementDef {
 }
 
 export const CATEGORIES: { id: Category; title: string }[] = [
-  { id: 'special', title: 'Особые' },
+  { id: 'special', title: 'Уникальные' },
   { id: 'voice', title: 'Голос' },
   { id: 'games', title: 'Игры' },
   { id: 'stream', title: 'Трансляции' },
-  { id: 'social', title: 'Сообщество' },
+  { id: 'social', title: 'Компания' },
+  { id: 'secret', title: 'Секреты' },
 ];
 
+const U = 'Такая ачивка может быть только у одного человека';
+
 export const CATALOG: AchievementDef[] = [
-  // special
-  { code: 'founder', title: 'Основатель', description: 'Поднял свой сервер Echo. Такой человек может быть только один', rarity: 'unique', category: 'special', icon: 'crown', unique: true },
-  { code: 'beta_tester', title: 'Первый бета-тестер', description: 'Был с Echo с самого начала и ловил баги первым. Такой человек может быть только один', rarity: 'unique', category: 'special', icon: 'flask', manual: true, unique: true },
-  // voice
+  // ---------- unique: one holder, ever ----------
+  { code: 'founder', title: 'Основатель', description: `Поднял свой сервер Echo. ${U}`, rarity: 'unique', category: 'special', icon: 'crown', unique: true },
+  { code: 'beta_tester', title: 'Первый бета-тестер', description: `Был с Echo с самого начала и ловил баги первым. ${U}`, rarity: 'unique', category: 'special', icon: 'flask', manual: true, unique: true },
+  { code: 'first_stream_ever', title: 'Первый эфир', description: `Самым первым на сервере запустил трансляцию. ${U}`, rarity: 'unique', category: 'special', icon: 'broadcast', unique: true },
+  { code: 'pioneer_100h', title: 'Первопроходец', description: `Первым набрал 100 часов в голосе. ${U}`, rarity: 'unique', category: 'special', icon: 'flag', unique: true },
+  { code: 'first_singularity', title: 'Сингулярность №1', description: `Первым дошёл до высшего ранга. ${U}`, rarity: 'unique', category: 'special', icon: 'singularity', unique: true },
+  { code: 'first_secret', title: 'Взломщик', description: `Первым открыл секретную ачивку. ${U}`, rarity: 'unique', category: 'special', icon: 'key', unique: true },
+  { code: 'first_museum', title: 'Музей', description: `Первым сыграл в 25 разных игр. ${U}`, rarity: 'unique', category: 'special', icon: 'stack', unique: true },
+  { code: 'iron_streak', title: 'Несгибаемый', description: `Первым заходил в голос 30 дней подряд. ${U}`, rarity: 'unique', category: 'special', icon: 'flame', unique: true },
+
+  // ---------- voice ----------
   { code: 'first_steps', title: 'Первые шаги', description: 'Впервые зашёл в голосовой канал', rarity: 'common', category: 'voice', icon: 'door' },
   { code: 'voice_1h', title: 'Разговорчивый', description: 'Провёл в голосе 1 час', rarity: 'common', category: 'voice', icon: 'wave' },
   { code: 'voice_10h', title: 'Душа компании', description: 'Провёл в голосе 10 часов', rarity: 'rare', category: 'voice', icon: 'waves' },
   { code: 'voice_100h', title: 'Легенда войса', description: 'Провёл в голосе 100 часов', rarity: 'legendary', category: 'voice', icon: 'infinity' },
+  { code: 'voice_500h', title: 'Живёт в Echo', description: 'Провёл в голосе 500 часов', rarity: 'legendary', category: 'voice', icon: 'home' },
   { code: 'marathon', title: 'Марафонец', description: '4 часа подряд в одном канале', rarity: 'epic', category: 'voice', icon: 'timer' },
   { code: 'night_owl', title: 'Полуночник', description: 'Был в голосе между 3 и 5 утра', rarity: 'rare', category: 'voice', icon: 'moon' },
-  // games
+  { code: 'night_owl_10', title: 'Сова', description: 'Был в голосе глубокой ночью (3–5 утра) в 10 разных ночей', rarity: 'epic', category: 'voice', icon: 'owl' },
+  { code: 'streak_7', title: 'Неделя в строю', description: 'Заходил в голос 7 дней подряд', rarity: 'rare', category: 'voice', icon: 'calendar' },
+  { code: 'streak_30', title: 'Месяц в строю', description: 'Заходил в голос 30 дней подряд', rarity: 'legendary', category: 'voice', icon: 'flame' },
+  { code: 'regular_100', title: 'Завсегдатай', description: 'Был в голосе в 100 разных дней', rarity: 'legendary', category: 'voice', icon: 'calendar' },
+
+  // ---------- games ----------
   { code: 'gamer', title: 'Геймер', description: 'Запустил игру, пока Echo был включён', rarity: 'common', category: 'games', icon: 'gamepad' },
   { code: 'game_10h', title: 'Задрот', description: 'Наиграл 10 часов', rarity: 'rare', category: 'games', icon: 'joystick' },
   { code: 'game_100h', title: 'Не выключает компьютер', description: 'Наиграл 100 часов', rarity: 'legendary', category: 'games', icon: 'trophy' },
+  { code: 'game_500h', title: 'Киберспортсмен', description: 'Наиграл 500 часов', rarity: 'legendary', category: 'games', icon: 'medal' },
   { code: 'collector', title: 'Коллекционер', description: 'Играл в 5 разных игр', rarity: 'rare', category: 'games', icon: 'stack' },
+  { code: 'collector_15', title: 'Библиотекарь', description: 'Играл в 15 разных игр', rarity: 'epic', category: 'games', icon: 'stack' },
+  { code: 'one_game_100h', title: 'Однолюб', description: 'Наиграл 100 часов в одной игре', rarity: 'epic', category: 'games', icon: 'heart' },
+  { code: 'session_6h', title: 'Залип', description: '6 часов подряд в одной игре', rarity: 'epic', category: 'games', icon: 'timer' },
   { code: 'teammates', title: 'Тиммейты', description: 'Играли в одну игру, сидя в одном голосовом канале', rarity: 'rare', category: 'games', icon: 'handshake' },
   { code: 'squad', title: 'Отряд', description: 'Трое и больше одновременно в одной игре', rarity: 'epic', category: 'games', icon: 'shield' },
-  // stream
+  { code: 'squad_5', title: 'Пятёрка', description: 'Пятеро в одной игре и в одном голосовом канале', rarity: 'legendary', category: 'games', icon: 'shield' },
+
+  // ---------- streams ----------
   { code: 'streamer', title: 'В эфире', description: 'Запустил первую трансляцию', rarity: 'common', category: 'stream', icon: 'broadcast' },
   { code: 'stream_10', title: 'Стример', description: 'Провёл 10 трансляций', rarity: 'rare', category: 'stream', icon: 'signal' },
-  // social
+  { code: 'stream_50', title: 'Ведущий', description: 'Провёл 50 трансляций', rarity: 'epic', category: 'stream', icon: 'mic' },
+  { code: 'stream_200', title: 'Телеканал', description: 'Провёл 200 трансляций', rarity: 'legendary', category: 'stream', icon: 'tv' },
+  { code: 'stream_3h', title: 'Эфир без конца', description: 'Одна трансляция длиной 3 часа', rarity: 'epic', category: 'stream', icon: 'timer' },
+
+  // ---------- company ----------
   { code: 'full_house', title: 'Полный сбор', description: 'Был в канале, где собрались 5 человек и больше', rarity: 'rare', category: 'social', icon: 'people' },
-  // hidden — the catalog only shows "secret achievement" until someone earns them
-  { code: 'echo_of_silence', title: 'Эхо тишины', description: 'Просидел час в голосовом канале совсем один', rarity: 'rare', category: 'voice', icon: 'echo', hidden: true },
-  { code: 'early_bird', title: 'Ранняя пташка', description: 'Зашёл в голос между 6 и 7 утра', rarity: 'rare', category: 'voice', icon: 'sunrise', hidden: true },
-  { code: 'all_nighter', title: 'Не спится', description: '8 часов подряд в одном канале', rarity: 'legendary', category: 'voice', icon: 'coffee', hidden: true },
-  { code: 'hopper', title: 'Попрыгунчик', description: 'Сменил канал 10 раз за 10 минут', rarity: 'epic', category: 'social', icon: 'shuffle', hidden: true },
+  { code: 'big_house', title: 'Аншлаг', description: 'Был в канале, где собрались 8 человек и больше', rarity: 'legendary', category: 'social', icon: 'people' },
+  { code: 'met_5', title: 'Знакомства', description: 'Посидел в голосе с 5 разными людьми', rarity: 'rare', category: 'social', icon: 'handshake' },
+  { code: 'met_all', title: 'Свой среди своих', description: 'Посидел в голосе с каждым на сервере (если вас хотя бы четверо)', rarity: 'epic', category: 'social', icon: 'globe' },
+  { code: 'duo_100h', title: 'Неразлучные', description: '100 часов в голосе вместе с одним и тем же человеком', rarity: 'legendary', category: 'social', icon: 'heart' },
+
+  // ---------- secret (masked until earned) ----------
+  { code: 'echo_of_silence', title: 'Эхо тишины', description: 'Просидел час в голосовом канале совсем один', rarity: 'rare', category: 'secret', icon: 'echo', hidden: true },
+  { code: 'ghost_town', title: 'Город-призрак', description: 'Просидел в канале один 3 часа подряд', rarity: 'epic', category: 'secret', icon: 'ghost', hidden: true },
+  { code: 'early_bird', title: 'Ранняя пташка', description: 'Зашёл в голос между 6 и 7 утра', rarity: 'rare', category: 'secret', icon: 'sunrise', hidden: true },
+  { code: 'all_nighter', title: 'Не спится', description: '8 часов подряд в одном канале', rarity: 'legendary', category: 'secret', icon: 'coffee', hidden: true },
+  { code: 'hopper', title: 'Попрыгунчик', description: 'Сменил канал 10 раз за 10 минут', rarity: 'epic', category: 'secret', icon: 'shuffle', hidden: true },
+  { code: 'midnight', title: 'Ровно в полночь', description: 'Зашёл в голос в 00:00', rarity: 'rare', category: 'secret', icon: 'moon', hidden: true },
+  { code: 'leet', title: '1337', description: 'Был в голосе в 13:37', rarity: 'rare', category: 'secret', icon: 'terminal', hidden: true },
+  { code: 'friday13', title: 'Пятница, 13', description: 'Был в голосе в пятницу 13-го', rarity: 'epic', category: 'secret', icon: 'cat', hidden: true },
+  { code: 'new_year', title: 'С Новым годом!', description: 'Встретил Новый год в голосовом канале', rarity: 'legendary', category: 'secret', icon: 'sparkle', hidden: true },
+  { code: 'comeback', title: 'Блудный сын', description: 'Вернулся в голос после 30 дней отсутствия', rarity: 'rare', category: 'secret', icon: 'door', hidden: true },
 ];
 
 /** What clients see: hidden achievements are masked unless the viewer has earned them. */
@@ -94,6 +131,22 @@ db.exec(`
     seconds  INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (user_id, game)
   );
+
+  -- Days (server time zone) someone was in voice; night = also between 3 and 5 am.
+  CREATE TABLE IF NOT EXISTS user_days (
+    user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day      TEXT NOT NULL,
+    night    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, day)
+  );
+
+  -- Time spent in the same voice channel, per pair (a < b).
+  CREATE TABLE IF NOT EXISTS user_pairs (
+    a        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    b        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    seconds  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (a, b)
+  );
 `);
 
 const q = {
@@ -107,9 +160,24 @@ const q = {
   addGame: db.prepare(
     'INSERT INTO user_games (user_id, game, seconds) VALUES (?, ?, ?) ON CONFLICT(user_id, game) DO UPDATE SET seconds = seconds + excluded.seconds',
   ),
-  gameTotals: db.prepare('SELECT COALESCE(SUM(seconds), 0) AS total, COUNT(*) AS games FROM user_games WHERE user_id = ?'),
+  gameTotals: db.prepare(
+    'SELECT COALESCE(SUM(seconds), 0) AS total, COUNT(*) AS games, COALESCE(MAX(seconds), 0) AS best FROM user_games WHERE user_id = ?',
+  ),
   topGames: db.prepare('SELECT game, seconds FROM user_games WHERE user_id = ? ORDER BY seconds DESC LIMIT 3'),
   holderOf: db.prepare('SELECT user_id FROM user_achievements WHERE code = ? LIMIT 1'),
+  markDay: db.prepare(
+    'INSERT INTO user_days (user_id, day, night) VALUES (?, ?, ?) ON CONFLICT(user_id, day) DO UPDATE SET night = MAX(night, excluded.night)',
+  ),
+  days: db.prepare('SELECT day FROM user_days WHERE user_id = ? ORDER BY day DESC'),
+  lastDayBefore: db.prepare('SELECT day FROM user_days WHERE user_id = ? AND day < ? ORDER BY day DESC LIMIT 1'),
+  nights: db.prepare('SELECT COUNT(*) AS n FROM user_days WHERE user_id = ? AND night = 1'),
+  addPair: db.prepare(
+    'INSERT INTO user_pairs (a, b, seconds) VALUES (?, ?, ?) ON CONFLICT(a, b) DO UPDATE SET seconds = seconds + excluded.seconds',
+  ),
+  partners: db.prepare(
+    'SELECT COUNT(*) AS n, COALESCE(MAX(seconds), 0) AS best FROM user_pairs WHERE (a = ? OR b = ?) AND seconds > 0',
+  ),
+  userCount: db.prepare('SELECT COUNT(*) AS n FROM users'),
 };
 
 /** Who holds a unique achievement (if anyone). */
@@ -138,8 +206,12 @@ export function award(userId: string, code: string): boolean {
   }
   const res = q.insert.run(userId, code, Date.now());
   const isNew = Number(res.changes) > 0;
-  if (isNew) onAwarded(userId, code);
-  return isNew;
+  if (!isNew) return false;
+  onAwarded(userId, code);
+  // Chain rules that depend on other achievements.
+  if (def.hidden) award(userId, 'first_secret');
+  if (prestigeOf(userId).tier >= 4) award(userId, 'first_singularity');
+  return true;
 }
 
 export function revoke(userId: string, code: string) {
@@ -173,32 +245,93 @@ export function setPinned(userId: string, codes: string[]) {
 
 export function getStats(userId: string) {
   const row = q.stats.get(userId) as { voice_seconds: number; streams_count: number; is_admin: number } | undefined;
-  const games = q.gameTotals.get(userId) as { total: number; games: number };
+  const games = q.gameTotals.get(userId) as { total: number; games: number; best: number };
   return {
     voiceSeconds: row?.voice_seconds ?? 0,
     streamsCount: row?.streams_count ?? 0,
     gameSeconds: games.total,
     gamesCount: games.games,
+    bestGameSeconds: games.best,
     topGames: q.topGames.all(userId) as { game: string; seconds: number }[],
+    streakDays: currentStreak(userId),
   };
 }
 
-// ---------- automatic rules ----------
+// ---------- time helpers (server time zone, Europe/Moscow by default) ----------
 
 const HOUR = 3600;
+const TZ = process.env.ECHO_TZ ?? 'Europe/Moscow';
 
-function checkVoiceTotals(userId: string) {
-  const { voiceSeconds } = getStats(userId);
-  if (voiceSeconds >= 1 * HOUR) award(userId, 'voice_1h');
-  if (voiceSeconds >= 10 * HOUR) award(userId, 'voice_10h');
-  if (voiceSeconds >= 100 * HOUR) award(userId, 'voice_100h');
+function localParts(ms: number) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      weekday: 'short',
+      hourCycle: 'h23',
+    })
+      .formatToParts(ms)
+      .map((p) => [p.type, p.value]),
+  ) as Record<string, string>;
+  return {
+    day: `${parts.year}-${parts.month}-${parts.day}`,
+    month: Number(parts.month),
+    date: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    weekday: parts.weekday,
+  };
 }
 
-/** Local hour on the server's time zone (Europe/Moscow by default). */
-function localHour(ms: number): number {
-  const tz = process.env.ECHO_TZ ?? 'Europe/Moscow';
-  return Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone: tz }).format(ms));
+const dayNumber = (day: string) => Math.floor(Date.parse(`${day}T00:00:00Z`) / 86_400_000);
+
+/** Consecutive days (ending today or yesterday) with voice activity. */
+function currentStreak(userId: string): number {
+  const days = (q.days.all(userId) as { day: string }[]).map((r) => dayNumber(r.day));
+  if (days.length === 0) return 0;
+  const today = dayNumber(localParts(Date.now()).day);
+  if (days[0]! < today - 1) return 0;
+  let streak = 1;
+  for (let i = 1; i < days.length && days[i] === days[i - 1]! - 1; i++) streak++;
+  return streak;
 }
+
+/** Time-of-day secrets checked whenever someone is in voice. */
+function checkClock(userId: string, now: number, justJoined: boolean) {
+  const t = localParts(now);
+  if (t.hour >= 3 && t.hour < 5) award(userId, 'night_owl');
+  if (justJoined && t.hour >= 6 && t.hour < 7) award(userId, 'early_bird');
+  if (justJoined && t.hour === 0 && t.minute === 0) award(userId, 'midnight');
+  if (t.hour === 13 && t.minute === 37) award(userId, 'leet');
+  if (t.weekday === 'Fri' && t.date === 13) award(userId, 'friday13');
+  if ((t.month === 12 && t.date === 31 && t.hour === 23 && t.minute >= 30) || (t.month === 1 && t.date === 1 && t.hour === 0 && t.minute < 30)) {
+    award(userId, 'new_year');
+  }
+}
+
+/** Records today's voice day and checks streak / regular / night / comeback rules. */
+function markDay(userId: string, now: number) {
+  const t = localParts(now);
+  const night = t.hour >= 3 && t.hour < 5 ? 1 : 0;
+  const prev = q.lastDayBefore.get(userId, t.day) as { day: string } | undefined;
+  q.markDay.run(userId, t.day, night);
+  if (prev && dayNumber(t.day) - dayNumber(prev.day) >= 30) award(userId, 'comeback');
+
+  const streak = currentStreak(userId);
+  if (streak >= 7) award(userId, 'streak_7');
+  if (streak >= 30) {
+    award(userId, 'streak_30');
+    award(userId, 'iron_streak');
+  }
+  if ((q.days.all(userId) as unknown[]).length >= 100) award(userId, 'regular_100');
+  if ((q.nights.get(userId) as { n: number }).n >= 10) award(userId, 'night_owl_10');
+}
+
+// ---------- voice sessions ----------
 
 interface Session {
   room: string;
@@ -214,6 +347,17 @@ const switches = new Map<string, number[]>();
 /** Who is in voice right now, for time tracking. Keyed by user id. */
 const sessions = new Map<string, Session>();
 
+function checkVoiceTotals(userId: string) {
+  const { voiceSeconds } = getStats(userId);
+  if (voiceSeconds >= 1 * HOUR) award(userId, 'voice_1h');
+  if (voiceSeconds >= 10 * HOUR) award(userId, 'voice_10h');
+  if (voiceSeconds >= 100 * HOUR) {
+    award(userId, 'voice_100h');
+    award(userId, 'pioneer_100h');
+  }
+  if (voiceSeconds >= 500 * HOUR) award(userId, 'voice_500h');
+}
+
 export function voiceJoined(userId: string, room: string) {
   if (!queries.userById.get(userId)) return;
   const now = Date.now();
@@ -221,9 +365,8 @@ export function voiceJoined(userId: string, room: string) {
   if (prev && prev.room !== room) voiceLeft(userId, prev.room);
   if (!sessions.has(userId)) sessions.set(userId, { room, since: now, accounted: now, aloneSince: null });
   award(userId, 'first_steps');
-
-  const h = localHour(now);
-  if (h >= 6 && h < 7) award(userId, 'early_bird');
+  markDay(userId, now);
+  checkClock(userId, now, true);
 
   const recent = [...(switches.get(userId) ?? []), now].filter((t) => now - t < 10 * 60_000);
   switches.set(userId, recent);
@@ -243,8 +386,13 @@ function flush(userId: string, s: Session, now: number) {
   if (secs > 0) {
     q.addVoice.run(secs, userId);
     s.accounted += secs * 1000;
+    // Time together, counted from the side of the lower id so each pair is added once.
+    for (const [otherId, other] of sessions) {
+      if (otherId !== userId && other.room === s.room && userId < otherId) q.addPair.run(userId, otherId, secs);
+    }
   }
   checkVoiceTotals(userId);
+  checkSocial(userId);
   if (now - s.since >= 4 * HOUR * 1000) award(userId, 'marathon');
   if (now - s.since >= 8 * HOUR * 1000) award(userId, 'all_nighter');
 
@@ -253,35 +401,57 @@ function flush(userId: string, s: Session, now: number) {
   else {
     s.aloneSince ??= now;
     if (now - s.aloneSince >= HOUR * 1000) award(userId, 'echo_of_silence');
+    if (now - s.aloneSince >= 3 * HOUR * 1000) award(userId, 'ghost_town');
   }
-  const h = localHour(now);
-  if (h >= 3 && h < 5) award(userId, 'night_owl');
+  markDay(userId, now);
+  checkClock(userId, now, false);
 }
 
-// ---------- prestige: rank from achievements ----------
+function checkSocial(userId: string) {
+  const p = q.partners.get(userId, userId) as { n: number; best: number };
+  if (p.n >= 5) award(userId, 'met_5');
+  const total = (q.userCount.get() as { n: number }).n;
+  if (total >= 4 && p.n >= total - 1) award(userId, 'met_all');
+  if (p.best >= 100 * HOUR) award(userId, 'duo_100h');
+}
 
-const POINTS: Record<Rarity, number> = { common: 10, rare: 25, epic: 60, legendary: 150, unique: 200 };
-/** Tier floors: none, bronze, silver, gold, legend. */
-const TIERS = [0, 30, 100, 220, 400];
+// ---------- prestige: level and rank from achievement points ----------
+
+const POINTS: Record<Rarity, number> = { common: 10, rare: 30, epic: 75, legendary: 200, unique: 300 };
+/** Rank by level: Сигнал 1–4, Резонанс 5–8, Импульс 9–12, Квазар 13–16, Сингулярность 17+. */
+const TIER_LEVELS = [1, 5, 9, 13, 17];
 
 export interface Prestige {
   points: number;
   level: number;
   tier: number;
+  /** Points where the current level starts / the next one begins (for the progress ring). */
+  levelFloor: number;
+  nextLevelAt: number;
+  /** Level at which the next rank begins (null at the top). */
+  nextTierLevel: number | null;
+  // Kept for older clients.
   nextTierAt: number | null;
   tierFloor: number;
 }
 
+/** Level L needs 10·(L−1)² points: 10 → 2, 90 → 4, 640 → 9, 2560 → 17. */
+const pointsForLevel = (level: number) => 10 * (level - 1) ** 2;
+
 export function prestigeFromPoints(points: number): Prestige {
+  const level = 1 + Math.floor(Math.sqrt(points / 10));
   let tier = 0;
-  while (tier + 1 < TIERS.length && points >= TIERS[tier + 1]!) tier++;
+  while (tier + 1 < TIER_LEVELS.length && level >= TIER_LEVELS[tier + 1]!) tier++;
+  const nextTierLevel = TIER_LEVELS[tier + 1] ?? null;
   return {
     points,
-    // Grows quickly at first, slower later: 10 pts -> 1, 100 -> 4, 400 -> 8, 845 -> 11.
-    level: Math.max(1, Math.floor(Math.sqrt(points / 6.5))),
+    level,
     tier,
-    nextTierAt: TIERS[tier + 1] ?? null,
-    tierFloor: TIERS[tier]!,
+    levelFloor: pointsForLevel(level),
+    nextLevelAt: pointsForLevel(level + 1),
+    nextTierLevel,
+    nextTierAt: nextTierLevel ? pointsForLevel(nextTierLevel) : null,
+    tierFloor: pointsForLevel(TIER_LEVELS[tier]!),
   };
 }
 
@@ -308,10 +478,21 @@ export function uniquesMap(): Map<string, string[]> {
   return out;
 }
 
+/** All achievement codes per user (for cosmetic unlocks). */
+export function ownedMap(): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const r of allAwards.all() as { user_id: string; code: string }[]) {
+    if (!out.has(r.user_id)) out.set(r.user_id, new Set());
+    out.get(r.user_id)!.add(r.code);
+  }
+  return out;
+}
+
 // ---------- games ----------
 
 interface GameSession {
   game: string;
+  since: number;
   accounted: number;
 }
 
@@ -324,10 +505,19 @@ function flushGame(userId: string, g: GameSession, now: number) {
     q.addGame.run(userId, g.game, secs);
     g.accounted += secs * 1000;
   }
-  const { gameSeconds, gamesCount } = getStats(userId);
+  const { gameSeconds, gamesCount, bestGameSeconds } = getStats(userId);
   if (gameSeconds >= 10 * HOUR) award(userId, 'game_10h');
   if (gameSeconds >= 100 * HOUR) award(userId, 'game_100h');
+  if (gameSeconds >= 500 * HOUR) award(userId, 'game_500h');
+  if (bestGameSeconds >= 100 * HOUR) award(userId, 'one_game_100h');
+  checkCollection(userId, gamesCount);
+  if (now - g.since >= 6 * HOUR * 1000) award(userId, 'session_6h');
+}
+
+function checkCollection(userId: string, gamesCount: number) {
   if (gamesCount >= 5) award(userId, 'collector');
+  if (gamesCount >= 15) award(userId, 'collector_15');
+  if (gamesCount >= 25) award(userId, 'first_museum');
 }
 
 /** Called when a user's detected game changes (null = stopped / went offline). */
@@ -340,15 +530,15 @@ export function gameChanged(userId: string, game: string | null) {
     gameSessions.delete(userId);
   }
   if (game) {
-    gameSessions.set(userId, { game, accounted: now });
+    gameSessions.set(userId, { game, since: now, accounted: now });
     q.addGame.run(userId, game, 0); // counts toward "different games" right away
     award(userId, 'gamer');
-    if (getStats(userId).gamesCount >= 5) award(userId, 'collector');
+    checkCollection(userId, getStats(userId).gamesCount);
   }
   checkTogether();
 }
 
-/** Squad: 3+ people in the same game. Teammates: same game and same voice channel. */
+/** Squad: 3+ in the same game. Teammates: same game + same channel (5 of them: "Пятёрка"). */
 function checkTogether() {
   const byGame = new Map<string, string[]>();
   for (const [id, g] of gameSessions) byGame.set(g.game, [...(byGame.get(g.game) ?? []), id]);
@@ -360,7 +550,10 @@ function checkTogether() {
       const room = sessions.get(id)?.room;
       if (room) byRoom.set(room, [...(byRoom.get(room) ?? []), id]);
     }
-    for (const together of byRoom.values()) if (together.length >= 2) for (const id of together) award(id, 'teammates');
+    for (const together of byRoom.values()) {
+      if (together.length >= 2) for (const id of together) award(id, 'teammates');
+      if (together.length >= 5) for (const id of together) award(id, 'squad_5');
+    }
   }
 }
 
@@ -368,25 +561,43 @@ function checkTogether() {
 export function roomMembers(room: string, userIds: string[]) {
   for (const id of userIds) if (!sessions.has(id)) voiceJoined(id, room);
   if (userIds.length >= 5) for (const id of userIds) award(id, 'full_house');
+  if (userIds.length >= 8) for (const id of userIds) award(id, 'big_house');
 }
+
+// ---------- streams ----------
+
+/** When each running stream started. */
+const streams = new Map<string, number>();
 
 export function streamStarted(userId: string) {
   if (!queries.userById.get(userId)) return;
   q.addStream.run(userId);
+  streams.set(userId, Date.now());
   award(userId, 'streamer');
-  if (getStats(userId).streamsCount >= 10) award(userId, 'stream_10');
+  award(userId, 'first_stream_ever');
+  const { streamsCount } = getStats(userId);
+  if (streamsCount >= 10) award(userId, 'stream_10');
+  if (streamsCount >= 50) award(userId, 'stream_50');
+  if (streamsCount >= 200) award(userId, 'stream_200');
+}
+
+export function streamStopped(userId: string) {
+  const since = streams.get(userId);
+  streams.delete(userId);
+  if (since && Date.now() - since >= 3 * HOUR * 1000) award(userId, 'stream_3h');
 }
 
 export function syncAdmins() {
   for (const u of queries.listUsers.all() as unknown as User[]) if (u.is_admin) award(u.id, 'founder');
 }
 
-/** Accrue voice time every minute so a restart loses at most a minute. */
+/** Accrue voice/game time every minute so a restart loses at most a minute. */
 export function startAchievementClock() {
   syncAdmins();
   setInterval(() => {
     const now = Date.now();
     for (const [id, s] of sessions) flush(id, s, now);
     for (const [id, g] of gameSessions) flushGame(id, g, now);
+    for (const [id, since] of streams) if (now - since >= 3 * HOUR * 1000) award(id, 'stream_3h');
   }, 60_000).unref();
 }

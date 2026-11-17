@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger, FastifyReply } from 'fastify';
 import { ParticipantInfo_State, TrackSource, type WebhookEvent } from 'livekit-server-sdk';
-import { definition, gameChanged, getPinnedFromRow, prestigeFromPoints, prestigeMap, roomMembers, uniquesMap, setAwardListener, streamStarted, voiceJoined, voiceLeft } from './achievements.ts';
+import { definition, gameChanged, getPinnedFromRow, prestigeFromPoints, prestigeMap, roomMembers, uniquesMap, setAwardListener, streamStarted, streamStopped, voiceJoined, voiceLeft } from './achievements.ts';
+import { parseStatus, styleContext } from './cosmetics.ts';
 import { queries, type Channel } from './db.ts';
 import { channelIdFromRoom, roomNameForChannel, roomService, toMember, type ChannelMember } from './livekit.ts';
 
@@ -31,11 +32,14 @@ export function channelsSnapshot() {
         is_admin: number;
         is_moderator: number;
         banner_version: number | null;
+        style: string;
+        status: string;
       }[]
     ).map((u) => [u.id, u]),
   );
   const prestige = prestigeMap();
   const uniques = uniquesMap();
+  const styles = styleContext();
   return channels.map((c) => ({
     id: c.id,
     name: c.name,
@@ -51,6 +55,8 @@ export function channelsSnapshot() {
             uniques: uniques.get(m.id) ?? [],
             role: roleOf(profile),
             banner: profile.banner_version,
+            style: styles.resolve(m.id, profile.style),
+            status: parseStatus(profile.status),
           }
         : m;
     }),
@@ -116,6 +122,7 @@ export function presenceSnapshot() {
   const online = onlineIds();
   const prestige = prestigeMap();
   const uniques = uniquesMap();
+  const styles = styleContext();
   const rows = queries.userProfiles.all() as {
     id: string;
     nickname: string;
@@ -124,6 +131,8 @@ export function presenceSnapshot() {
     is_admin: number;
     is_moderator: number;
     banner_version: number | null;
+    style: string;
+    status: string;
   }[];
   return rows
     .filter((u) => online.has(u.id))
@@ -137,6 +146,8 @@ export function presenceSnapshot() {
       uniques: uniques.get(u.id) ?? [],
       role: roleOf(u),
       banner: u.banner_version,
+      style: styles.resolve(u.id, u.style),
+      status: parseStatus(u.status),
     }))
     .sort((a, b) => a.nickname.localeCompare(b.nickname, 'ru'));
 }
@@ -266,7 +277,10 @@ export async function handleWebhook(event: WebhookEvent) {
       break;
 
     case 'participant_left':
-      if (who) voiceLeft(who, room);
+      if (who) {
+        voiceLeft(who, room);
+        streamStopped(who);
+      }
       // Apply immediately instead of trusting a listing that may still include them.
       if (channelId !== null && who) {
         recentlyLeft.set(leftKey(room, who), Date.now() + LEFT_GRACE_MS);
@@ -290,6 +304,7 @@ export async function handleWebhook(event: WebhookEvent) {
       break;
 
     case 'track_unpublished':
+      if (who && event.track?.source === TrackSource.SCREEN_SHARE) streamStopped(who);
       await refreshRoom(room);
       break;
 
