@@ -4,6 +4,13 @@ import { useCatalog } from './Achievements';
 import { Avatar, Nick } from './Avatar';
 import { levelProgress, lookVars, rankName, RINGS } from './look';
 
+const GROUPS = [
+  { id: 'basic', title: 'БАЗОВЫЕ — ДЛЯ ВСЕХ' },
+  { id: 'level', title: 'ЗА УРОВЕНЬ' },
+  { id: 'achievement', title: 'ЗА АЧИВКИ' },
+  { id: 'exclusive', title: 'ЭКСКЛЮЗИВ АДМИНИСТРАЦИИ' },
+] as const;
+
 /** "Стиль": equip cosmetics unlocked by level and achievements, with a live preview. */
 export function StyleTab({ session }: { session: Session }) {
   const [data, setData] = useState<CosmeticsCatalog | null>(null);
@@ -38,6 +45,8 @@ export function StyleTab({ session }: { session: Session }) {
   };
 
   const requirement = (c: Cosmetic) => {
+    if (c.unlock.role === 'admin') return 'Только админ';
+    if (c.unlock.role === 'staff') return 'Админ и модераторы';
     if (c.unlock.level) return `Уровень ${c.unlock.level}`;
     if (c.unlock.achievement) {
       const def = achievements.find((a) => a.code === c.unlock.achievement);
@@ -105,21 +114,26 @@ export function StyleTab({ session }: { session: Session }) {
       {data.slots.map((slot) => (
         <div key={slot.id}>
           <h3>{slot.title}</h3>
-          <div class="cosmetics">
-            {data.items
-              .filter((c) => c.slot === slot.id)
+          {GROUPS.map((g) => {
+            const items = data.items.filter((c) => c.slot === slot.id && c.group === g.id);
+            if (items.length === 0) return null;
+            return (
+              <div key={g.id}>
+          <div class={`cosmetic-group ${g.id}`}>{g.title}</div>
+          <div class={`cosmetics${slot.id === 'frame' ? ' frames' : ''}`}>
+            {items
               .map((c) => {
                 const active = look[slot.id] === c.id;
                 const preview: Look = { ...look, [slot.id]: c.id };
                 return (
                   <button
                     key={c.id}
-                    class={`cosmetic${active ? ' active' : ''}${c.unlocked ? '' : ' locked'}`}
+                    class={`cosmetic${active ? ' active' : ''}${c.unlocked ? '' : ' locked'}${c.group === 'exclusive' ? ' exclusive' : ''}`}
                     disabled={!c.unlocked}
                     title={c.unlocked ? c.title : `${c.title} — ${requirement(c)}`}
                     onClick={() => void equip(slot.id, c.id)}
                   >
-                    <span class="cosmetic-preview" style={lookVars(preview)}>
+                    <span class={`cosmetic-preview${slot.id === 'frame' ? ' frame-preview' : ''}`} style={lookVars(preview)}>
                       {slot.id === 'ring' && (
                         <span class="ring-swatch" style={{ background: RINGS[c.id]?.bg ?? RINGS[c.id]?.c }} />
                       )}
@@ -128,21 +142,26 @@ export function StyleTab({ session }: { session: Session }) {
                           id={me.id}
                           name={me.nickname}
                           avatar={me.avatar}
-                          size={40}
+                          size={56}
                           prestige={p}
                           look={preview}
-                          animated={false}
+                          animated={active}
                         />
                       )}
                       {slot.id === 'name' && <Nick name={me.nickname} look={preview} class="cosmetic-nick" />}
                       {slot.id === 'plate' && <span class={`plate-swatch member plate-${c.id}`} />}
                     </span>
                     <span class="cosmetic-title">{c.title}</span>
-                    {!c.unlocked && <span class="cosmetic-lock mono">{requirement(c)}</span>}
+                    {(!c.unlocked || c.group === 'exclusive') && (
+                      <span class={`cosmetic-lock mono${c.unlock.role ? ' role' : ''}`}>{requirement(c)}</span>
+                    )}
                   </button>
                 );
               })}
           </div>
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>

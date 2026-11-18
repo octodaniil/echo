@@ -12,6 +12,12 @@ export interface EventHandlers {
   onMove(channelId: number, by: string): void;
   /** Who is online and what they play. */
   onPresence(users: unknown[]): void;
+  /** We are banned (message) or no longer banned (null). */
+  onBanned(message: string | null): void;
+  /** A moderator did something to us (mute, disconnect, rename…). */
+  onModeration(payload: unknown): void;
+  /** Chat: new / edited / deleted message, or someone typing. */
+  onChat(event: string, payload: unknown): void;
 }
 
 /**
@@ -34,8 +40,16 @@ export function startEvents(session: ActiveSession, handlers: EventHandlers): ()
           handlers.onUnauthorized('invalid');
           return;
         }
+        if (res.status === 403) {
+          // Banned: keep the session, show the ban screen and check again now and then.
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          handlers.onBanned(body.error ?? 'Ты заблокирован на сервере');
+          await new Promise((r) => setTimeout(r, 30_000));
+          continue;
+        }
         if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
 
+        handlers.onBanned(null);
         handlers.onConnectionChange(true);
         backoff = 1000;
 
@@ -62,6 +76,12 @@ export function startEvents(session: ActiveSession, handlers: EventHandlers): ()
             else if (event === 'move') {
               const m = JSON.parse(data) as { channelId: number; by: string };
               handlers.onMove(m.channelId, m.by);
+            }
+            else if (event === 'moderation') handlers.onModeration(JSON.parse(data));
+            else if (event === 'chat' || event === 'typing') handlers.onChat(event, JSON.parse(data));
+            else if (event === 'banned') {
+              handlers.onBanned((JSON.parse(data) as { message: string }).message);
+              break;
             }
             else if (event === 'kicked') {
               handlers.onUnauthorized('kicked');

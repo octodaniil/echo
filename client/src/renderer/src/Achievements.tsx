@@ -178,8 +178,8 @@ export function Badge({
   return (
     <span
       class={`badge r-${def.rarity}${locked ? ' locked' : ''}`}
-      style={{ width: size, height: size * 1.1 }}
-      title={title ?? `${def.title} — ${def.description}`}
+      style={{ width: size, height: Math.round(size * 1.1547) }}
+      data-ach={title === '' ? undefined : def.code}
     >
       <span class="badge-inner">
         <AchievementIcon icon={locked ? 'lock' : def.icon} size={Math.round(size * 0.42)} />

@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { Look, Prestige, StatusState } from '../../shared/types';
-import { Emblem } from './Achievements';
+import { FRAME_COLOR, FRAME_SCALE, FrameSvg, hasFrame } from './Frames';
 import { levelProgress, lookVars, rankName } from './look';
 import { avatarUrl } from './profile';
 
@@ -45,12 +45,16 @@ export function Avatar({
   const [broken, setBroken] = useState<string | null>(null);
   const showImage = url && broken !== url;
   const ring = Math.max(2, Math.round(size * 0.065));
-  const frame = look?.frame && look.frame !== 'none' ? look.frame : null;
+  const frame = hasFrame(look?.frame) ? look!.frame : null;
+  // Big avatars get the full drawn frame; space for it is reserved around the avatar so it
+  // never covers the nickname or anything next to it. Small ones (lists) get a compact ring.
+  const full = !!frame && size >= 40;
+  const pad = full ? Math.round((size * FRAME_SCALE - size) / 2) : frame ? 3 : 0;
   const showLevel = !!prestige && size >= 30;
   const cls = [
     'avatar-wrap',
     prestige ? 'has-ring' : '',
-    frame ? `frame-${frame}` : '',
+    frame ? (full ? 'has-frame' : 'mini-frame') : '',
     `ring-${look?.ring ?? 'accent'}`,
     speaking ? 'speaking' : '',
     animated ? 'anim' : '',
@@ -65,14 +69,21 @@ export function Avatar({
       style={{
         width: size,
         height: size,
+        margin: pad ? `${pad}px` : undefined,
         '--ring': `${ring}px`,
+        '--fc': frame ? FRAME_COLOR[frame] : undefined,
+        '--pad': `${pad}px`,
         '--p': `${Math.round(levelProgress(prestige) * 100)}`,
         ...lookVars(look),
       }}
       title={prestige ? `${rankName(prestige)} · уровень ${prestige.level}` : undefined}
     >
       {prestige && <span class="lvl-ring" />}
-      {frame && <span class="frame" />}
+      {full && (
+        <span class="frame-box" style={{ inset: `-${pad}px` }}>
+          <FrameSvg id={frame} animated={animated} />
+        </span>
+      )}
       <span
         class="avatar"
         style={{
@@ -96,7 +107,6 @@ export function Avatar({
       {status && status !== 'online' && (
         <span class={`status-dot st-${status}`} style={{ width: Math.min(20, Math.max(9, size * 0.24)), height: Math.min(20, Math.max(9, size * 0.24)) }} />
       )}
-      {size >= 20 && <Emblem uniques={uniques} size={size} />}
     </span>
   );
 }

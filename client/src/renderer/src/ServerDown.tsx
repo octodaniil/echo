@@ -42,3 +42,23 @@ export function ServerDown({ serverUrl }: { serverUrl: string }) {
     </div>
   );
 }
+
+/** Shown while we are banned. The session is kept: if the ban ends, Echo comes back by itself. */
+export function Banned({ message }: { message: string }) {
+  return (
+    <div class="server-down banned">
+      <div class="server-down-card">
+        <div class="server-down-icon">
+          <span />
+        </div>
+        <h2>Доступ закрыт</h2>
+        <p class="muted">{message}</p>
+        <div class="server-down-status mono">
+          <span class="pulse-dot" />
+          проверяем раз в 30 секунд
+        </div>
+        <Contact />
+      </div>
+    </div>
+  );
+}

@@ -360,8 +360,11 @@ class VoiceClient {
 
   // ---------- connection ----------
 
-  async join(channelId: number) {
-    if (this.state.channelId === channelId && this.state.status !== 'idle') return;
+  async join(channelId: number, force = false) {
+    if (!force && this.state.channelId === channelId && this.state.status !== 'idle') return;
+    // Show the target channel right away (like Discord): we appear there as "connecting"
+    // while the old room closes. The mic pipeline is kept, so the switch is fast.
+    this.set({ status: 'connecting', channelId, error: null, participants: [], watching: null, sharing: null });
     await this.leave(true);
     this.set({ status: 'connecting', channelId, error: null });
 
@@ -473,7 +476,7 @@ class VoiceClient {
       if (this.state.micMuted || this.state.deafened || this.micTesting) await micTrack.mute();
 
       this.set({ status: 'connected' });
-      void play('join');
+      if (!force) void play('join');
       this.speakingTimer = window.setInterval(() => this.pollRemoteSpeaking(), 60);
       this.syncParticipants();
     } catch (err) {
@@ -484,6 +487,18 @@ class VoiceClient {
   }
 
   /** @param switching true when leaving only to join another channel (no "leave" sound). */
+  /** After a moderator's mute ends: publish our mic again (the server dropped it). */
+  async republishMic() {
+    const room = this.room;
+    const track = this.micTrack;
+    if (!room || !track || this.state.status !== 'connected') return;
+    if ([...room.localParticipant.audioTrackPublications.values()].some((p) => p.track === track)) return;
+    await room.localParticipant
+      .publishTrack(track, { source: Track.Source.Microphone, dtx: true, red: true, audioPreset: { maxBitrate: 48_000 } })
+      .catch((err) => console.warn('[voice] republish mic', err));
+    if (this.state.micMuted || this.state.deafened || this.micTesting) await track.mute();
+  }
+
   async leave(switching = false) {
     const room = this.room;
     if (!room) return;
@@ -491,11 +506,11 @@ class VoiceClient {
       this.pendingWatch = null;
       void play('leave');
     }
-    await this.teardown(null);
+    await this.teardown(null, switching);
     await room.disconnect();
   }
 
-  private async teardown(error: string | null) {
+  private async teardown(error: string | null, switching = false) {
     clearInterval(this.speakingTimer);
     this.room = null;
     this.micTrack = null;
@@ -505,16 +520,44 @@ class VoiceClient {
     void this.meterCtx?.close();
     this.meterCtx = null;
     document.querySelectorAll('[data-echo-audio]').forEach((el) => el.remove());
+    if (switching) {
+      // Keep showing the channel we are moving to; keep the mic pipeline for the new room.
+      this.set({ ...initial, micMuted: this.state.micMuted, deafened: this.state.deafened, status: 'connecting', channelId: this.state.channelId });
+      return;
+    }
     this.set({ ...initial, micMuted: this.state.micMuted, deafened: this.state.deafened, error });
     await this.releasePipelineIfUnused();
   }
 
   // ---------- screen sharing ----------
 
+  private publisherPc(): RTCPeerConnection | undefined {
+    return (this.room as unknown as { engine?: { pcManager?: { publisher?: { pc?: RTCPeerConnection } } } } | null)?.engine
+      ?.pcManager?.publisher?.pc;
+  }
+
+  /**
+   * LiveKit never removes a stopped stream from the connection: each stop leaves its video
+   * and audio sections behind as "inactive", and every renegotiation has to carry all of
+   * them. After ~100 restarts starting a stream crawled. We count the dead sections and,
+   * past a limit, quietly reconnect to the same channel to start from a clean connection.
+   */
+  private deadSections(): number {
+    const pc = this.publisherPc();
+    if (!pc) return 0;
+    return pc.getTransceivers().filter((t) => !t.sender.track && (t.direction === 'inactive' || t.currentDirection === 'inactive'))
+      .length;
+  }
+
   async startScreenShare(source: { id: string; name: string }, withAudio: boolean) {
-    const room = this.room;
-    if (!room || this.state.status !== 'connected') throw new Error('Сначала зайди в голосовой канал');
+    if (!this.room || this.state.status !== 'connected') throw new Error('Сначала зайди в голосовой канал');
     if (this.state.sharing) await this.stopScreenShare();
+    if (this.deadSections() >= 16 && this.state.channelId !== null) {
+      console.info('[stream] clean reconnect before streaming, dead sections:', this.deadSections());
+      await this.join(this.state.channelId, true);
+    }
+    const room = this.room;
+    if (!room || this.state.status !== 'connected') throw new Error('Не удалось переподключиться к каналу, попробуй ещё раз');
 
     const { q, bitrate, degradation, hint } = streamParams(settings.get());
     await window.echo.selectScreenSource(source.id, withAudio);

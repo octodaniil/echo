@@ -12,6 +12,10 @@ export function avatarUrl(userId: string, version: number | null | undefined): s
   return version && serverUrl ? `${serverUrl}/api/avatars/${userId}?v=${version}` : null;
 }
 
+export function attachmentUrl(key: string): string {
+  return `${serverUrl}/api/attachments/${key}`;
+}
+
 export function bannerUrl(userId: string, version: number | null | undefined): string | null {
   return version && serverUrl ? `${serverUrl}/api/banners/${userId}?v=${version}` : null;
 }

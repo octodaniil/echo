@@ -3,8 +3,10 @@ import type { Channel, PresenceUser, Session, SessionEndReason } from '../../sha
 import { installAppSync } from './appSync';
 import { Login } from './Login';
 import { setServerUrl } from './profile';
-import { ServerDown } from './ServerDown';
+import { Banned, ServerDown } from './ServerDown';
 import { Main } from './Shell';
+import { TooltipLayer } from './Tooltip';
+import { FrameDefs } from './Frames';
 import { voice } from './voice';
 
 const endNotice: Record<SessionEndReason, string | null> = {
@@ -19,6 +21,14 @@ export function App() {
   const [presence, setPresence] = useState<PresenceUser[]>([]);
   const [online, setOnline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [banned, setBanned] = useState<string | null>(null);
+  useEffect(() => {
+    void window.echo.getBanned().then(setBanned);
+    return window.echo.onBanned((m) => {
+      setBanned(m);
+      if (m) void voice.leave();
+    });
+  }, []);
   // Show the "server is off" screen only after a few seconds offline (not on brief blips or startup).
   const [serverDown, setServerDown] = useState(false);
   useEffect(() => {
@@ -88,7 +98,9 @@ export function App() {
   return (
     <>
       <Main session={session} channels={channels} presence={presence} online={online} onSession={setSession} />
-      {serverDown && <ServerDown serverUrl={session.serverUrl} />}
+      <TooltipLayer />
+      <FrameDefs />
+      {banned ? <Banned message={banned} /> : serverDown && <ServerDown serverUrl={session.serverUrl} />}
     </>
   );
 }

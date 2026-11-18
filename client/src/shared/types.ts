@@ -55,7 +55,8 @@ export interface Cosmetic {
   id: string;
   slot: CosmeticSlot;
   title: string;
-  unlock: { level?: number; achievement?: string; unique?: boolean };
+  group: 'basic' | 'level' | 'achievement' | 'exclusive';
+  unlock: { level?: number; achievement?: string; unique?: boolean; role?: 'admin' | 'staff' };
   unlocked: boolean;
 }
 
@@ -90,6 +91,8 @@ export interface PresenceUser {
   banner?: number | null;
   style?: Look;
   status?: UserStatus;
+  /** Voice-muted by a moderator. */
+  muted?: boolean;
 }
 
 export type UpdateStatus =
@@ -139,6 +142,7 @@ export interface ChannelMember {
   banner?: number | null;
   style?: Look;
   status?: UserStatus;
+  muted?: boolean;
   streaming: boolean;
   joinedAt: number;
 }
@@ -179,5 +183,62 @@ export interface ScreenSource {
 
 /** Shape of every IPC reply: errors are passed as data so their message survives the bridge. */
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+/** Everyone on the server, online or not (staff also see bans and mute times). */
+export interface Member {
+  id: string;
+  nickname: string;
+  avatar: number | null;
+  role: 'admin' | 'moderator' | null;
+  online: boolean;
+  lastSeenAt: number | null;
+  createdAt: number;
+  muted: boolean;
+  mutedUntil: number | null;
+  banned: boolean;
+  bannedUntil: number | null;
+  banReason: string | null;
+  /** Exclusive cosmetics the admin granted ("slot:id"; staff only see this). */
+  granted: string[];
+}
+
+export type ModAction = 'disconnect' | 'mute' | 'unmute' | 'nickname' | 'ban' | 'unban' | 'role' | 'delete' | 'cosmetic';
+
+export interface ModerationEvent {
+  action: 'disconnect' | 'mute' | 'unmute' | 'rename' | 'role';
+  by: string | null;
+  until?: number;
+  nickname?: string;
+  role?: 'moderator' | 'member';
+}
+
+export interface ChatMessage {
+  id: number;
+  conv: string;
+  author: string;
+  text: string;
+  createdAt: number;
+  editedAt: number | null;
+  deleted: boolean;
+  replyTo: number | null;
+  mentions: string[];
+  attachment: { key: string; type: string; size: number; w: number | null; h: number | null; gone: boolean } | null;
+}
+
+export type ChatEvent =
+  | { type: 'new' | 'edit' | 'delete'; message: ChatMessage }
+  | { type: 'cleared'; conv: string };
+
+export interface ChatState {
+  unread: { conv: string; lastId: number; unread: number; mentions: number }[];
+  dms: { conv: string; with: string; unread: number; last: ChatMessage | null }[];
+}
+
+export interface ChatStorage {
+  bytes: number;
+  attachments: number;
+  cap: number;
+  messages: number;
+}
 
 export type SessionEndReason = 'kicked' | 'invalid' | 'logout';

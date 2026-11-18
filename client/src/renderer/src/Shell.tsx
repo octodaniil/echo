@@ -1,9 +1,13 @@
 import type { ComponentChildren, VNode } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import type { AchievementDef, Activity, Channel, Look, PresenceUser, Prestige, Session, UserStatus } from '../../shared/types';
+import type { AchievementDef, Activity, Channel, Look, Member, ModerationEvent, PresenceUser, Prestige, Session, UserStatus } from '../../shared/types';
 import { Badge, LevelChip, PinnedBadges, reloadCatalog, UniqueTitles } from './Achievements';
+import { hasFrame } from './Frames';
 import { lookVars, rankName } from './look';
 import { StatusLine, StatusMenu, useMyStatus } from './Status';
+import { canModerate, MembersView, ModTools, RoleTag, type Role } from './Moderation';
+import { ChatPanel, type ChatPerson } from './ChatPanel';
+import { chat, dmConv, useChat } from './chatStore';
 import { coverUrl, GameCover } from './GameCover';
 import { Avatar, Nick } from './Avatar';
 import {
@@ -21,6 +25,7 @@ import {
   ScreenIcon,
   ScreenOffIcon,
   SignalIcon,
+  PeopleIcon,
   UserPlusIcon,
   VolumeIcon,
 } from './icons';
@@ -30,7 +35,6 @@ import { bannerUrl, useSettings } from './profile';
 import { ProfileView } from './ProfileView';
 import { ScreenPicker } from './ScreenPicker';
 import { SettingsView } from './SettingsView';
-import { settings } from './settings';
 import { play } from './sounds';
 import { StreamOptions } from './StreamOptions';
 import { voice, type ConnectionStats, type OutboundStats, type VoiceState } from './voice';
@@ -65,6 +69,7 @@ interface ProfileLite {
   banner?: number | null;
   style?: Look;
   status?: UserStatus;
+  muted?: boolean;
 }
 
 /** A person shown in the UI: server profile merged with live voice data when we share a channel. */
@@ -88,11 +93,17 @@ interface Person {
   banner?: number | null;
   style?: Look;
   status?: UserStatus;
+  /** We are on our way into this channel (switch in progress). */
+  connecting?: boolean;
+  /** Voice-muted by a moderator. */
+  muted?: boolean;
 }
 
 interface VolumeMenu {
   id: string;
   nickname: string;
+  role?: Role;
+  muted?: boolean;
   x: number;
   y: number;
 }
@@ -117,6 +128,25 @@ export function Main({
   const [volumeMenu, setVolumeMenu] = useState<VolumeMenu | null>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const isAdmin = session.user.isAdmin;
+  const myRole: Role = session.user.isAdmin ? 'admin' : session.user.isModerator ? 'moderator' : null;
+  const isStaff = myRole !== null;
+  const [showMembers, setShowMembers] = useState(false);
+  /** Open text conversation ("ch:<id>" or "dm:<a>|<b>"), shown next to the call or alone. */
+  const [chatConv, setChatConv] = useState<string | null>(null);
+  const store = useChat();
+  // Everyone ever registered (for names/avatars of people who are offline, e.g. in private chats).
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const askedFor = useRef(new Set<string>());
+  useEffect(() => {
+    const load = () => void window.echo.listMembers().then(setAllMembers).catch(() => {});
+    load();
+    const t = window.setInterval(load, 60_000);
+    void chat.start(session.user.id);
+    return () => {
+      clearInterval(t);
+      chat.stop();
+    };
+  }, [session.user.id]);
   const me = session.user;
   const currentChannel = channels.find((c) => c.id === v.channelId) ?? null;
 
@@ -135,6 +165,7 @@ export function Main({
           banner: m.banner,
           style: m.style,
           status: m.status,
+          muted: m.muted,
         });
     // Presence is the freshest source (also covers people who are online but not in voice).
     for (const u of presence)
@@ -149,6 +180,7 @@ export function Main({
         banner: u.banner,
         style: u.style,
         status: u.status,
+        muted: u.muted,
       });
     map.set(me.id, { ...map.get(me.id), nickname: me.nickname, avatar: me.avatar ?? null });
     return map;
@@ -168,7 +200,31 @@ export function Main({
       })
       .catch(() => {});
   }, [v.micMuted, v.deafened, v.status, currentChannel?.name]);
-  const nameOf = (id: string) => profiles.get(id)?.nickname ?? 'кто-то';
+  const nameOf = (id: string) => profiles.get(id)?.nickname ?? allMembers.find((m) => m.id === id)?.nickname ?? 'кто-то';
+  const chatPerson = (id: string): ChatPerson => {
+    const p = profiles.get(id);
+    const m = allMembers.find((x) => x.id === id);
+    // Someone who registered after we loaded the list: fetch it again (once per id).
+    if (!p && !m && !askedFor.current.has(id)) {
+      askedFor.current.add(id);
+      void window.echo.listMembers().then(setAllMembers).catch(() => {});
+    }
+    return {
+      nickname: p?.nickname ?? m?.nickname ?? 'удалённый пользователь',
+      avatar: p?.avatar ?? m?.avatar ?? null,
+      style: p?.style,
+      prestige: p?.prestige,
+      role: p?.role ?? m?.role ?? null,
+    };
+  };
+  chat.nameOf = nameOf;
+  chat.dnd = myProfile?.status?.state === 'dnd';
+  chat.onOpenRequest = (conv) => setChatConv(conv);
+  const openDm = (userId: string) => {
+    setProfileId(null);
+    setShowMembers(false);
+    setChatConv(dmConv(me.id, userId));
+  };
 
   // Current channel in the title bar.
   useEffect(() => {
@@ -232,6 +288,31 @@ export function Main({
     [],
   );
 
+  // Something a moderator did to us.
+  useEffect(
+    () =>
+      window.echo.onModeration((m: ModerationEvent) => {
+        const by = m.by ? ` (${m.by})` : '';
+        if (m.action === 'mute') {
+          const until = m.until && m.until < 32_503_680_000_000 ? ` до ${new Date(m.until).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : ' навсегда';
+          showToast(`Тебя замутили${until}${by}: говорить и стримить нельзя`, 7000);
+        } else if (m.action === 'unmute') {
+          showToast(`Мут снят${by} — можно говорить`);
+          void voice.republishMic();
+        } else if (m.action === 'disconnect') {
+          showToast(`Тебя отключили от голоса${by}`, 6000);
+        } else if (m.action === 'rename' && m.nickname) {
+          showToast(`Тебе сменили ник на «${m.nickname}»${by}`, 6000);
+          onSession({ ...session, user: { ...session.user, nickname: m.nickname } });
+        } else if (m.action === 'role') {
+          const mod = m.role === 'moderator';
+          showToast(mod ? `Ты теперь модератор${by}` : `Роль модератора снята${by}`, 6000);
+          onSession({ ...session, user: { ...session.user, isModerator: mod } });
+        }
+      }),
+    [session],
+  );
+
   const invite = async () => {
     try {
       const inv = await window.echo.createInvite();
@@ -243,7 +324,7 @@ export function Main({
 
   const openVolume = (e: MouseEvent, p: Person) => {
     e.preventDefault();
-    setVolumeMenu({ id: p.id, nickname: p.nickname, x: e.clientX, y: e.clientY });
+    setVolumeMenu({ id: p.id, nickname: p.nickname, role: p.role, muted: p.muted, x: e.clientX, y: e.clientY });
   };
 
   const peopleIn = (c: Channel): Person[] => {
@@ -264,6 +345,7 @@ export function Main({
           banner: prof?.banner ?? server?.banner,
           style: prof?.style ?? server?.style,
           status: prof?.status ?? server?.status,
+          muted: prof?.muted ?? server?.muted,
           streaming: p.streaming || (server?.streaming ?? false),
           joinedAt: server?.joinedAt || p.joinedAt,
         };
@@ -271,7 +353,36 @@ export function Main({
     }
     // While we're connected somewhere, a stale server list must not show us in a second channel.
     const inCallElsewhere = v.status !== 'idle' && v.channelId !== c.id;
-    return c.members
+    // Switching here: show ourselves in this channel at once, marked as connecting.
+    const arriving = v.channelId === c.id && v.status !== 'idle' && !c.members.some((m) => m.id === me.id);
+    const mine = profiles.get(me.id);
+    const self: Person[] = arriving
+      ? [
+          {
+            id: me.id,
+            nickname: me.nickname,
+            avatar: me.avatar ?? null,
+            pinned: mine?.pinned,
+            isLocal: true,
+            speaking: false,
+            micMuted: v.micMuted,
+            streaming: false,
+            joinedAt: Date.now(),
+            viewers: [],
+            ns: null,
+            prestige: mine?.prestige,
+            activity: mine?.activity ?? null,
+            uniques: mine?.uniques,
+            role: mine?.role,
+            banner: mine?.banner,
+            style: mine?.style,
+            status: mine?.status,
+            connecting: true,
+          },
+        ]
+      : [];
+    return [
+      ...c.members
       .filter((m) => !(inCallElsewhere && m.id === me.id))
       .map((m) => ({
         id: m.id,
@@ -292,7 +403,11 @@ export function Main({
         banner: profiles.get(m.id)?.banner ?? m.banner,
         style: profiles.get(m.id)?.style ?? m.style,
         status: profiles.get(m.id)?.status ?? m.status,
-      }));
+        muted: profiles.get(m.id)?.muted ?? m.muted,
+        connecting: m.id === me.id && v.status !== 'connected' && v.channelId === c.id,
+      })),
+      ...self,
+    ];
   };
 
   // Count what the lists show (a stale server entry for ourselves is filtered out there).
@@ -314,6 +429,9 @@ export function Main({
               {liveCount > 0 && <span class="hot">{liveCount} LIVE</span>}
             </div>
           </div>
+          <button class="icon-btn" title="Все участники" onClick={() => setShowMembers(true)}>
+            <PeopleIcon size={18} />
+          </button>
           {isAdmin && (
             <button class="icon-btn" title="Пригласить друга" onClick={() => void invite()}>
               <UserPlusIcon size={18} />
@@ -327,7 +445,7 @@ export function Main({
         <ChannelList
           channels={channels}
           voiceState={v}
-          isAdmin={isAdmin}
+          isAdmin={isStaff}
           peopleIn={peopleIn}
           onJoin={(id) => void voice.join(id)}
           onPersonMenu={openVolume}
@@ -342,7 +460,18 @@ export function Main({
             }
           }}
           onError={(m) => showToast(m)}
+          unreadOf={(conv) => store.unreadOf(conv)}
+          activeChat={chatConv}
+          onChat={(channelId) => setChatConv(chatConv === `ch:${channelId}` ? null : `ch:${channelId}`)}
         >
+          <DmList
+            me={me.id}
+            dms={store.dms}
+            active={chatConv}
+            person={chatPerson}
+            online={(id) => presence.some((u) => u.id === id)}
+            onOpen={(conv) => setChatConv(conv)}
+          />
           <OnlineList
             users={presence.filter((u) => !channels.some((c) => peopleIn(c).some((p) => p.id === u.id)))}
             onProfile={setProfileId}
@@ -387,6 +516,7 @@ export function Main({
             <span class="userbar-name">
               <span class="nick">
                 <Nick name={me.nickname} look={myProfile?.style} />
+                <RoleTag role={myRole} />
               </span>
               <StatusLine
                 status={myProfile?.status}
@@ -425,23 +555,59 @@ export function Main({
         </footer>
       </aside>
 
-      <main class="stage">
-        {currentChannel && v.status !== 'idle' ? (
-          <VoiceStage
-            channel={currentChannel}
-            state={v}
-            people={peopleIn(currentChannel)}
-            nameOf={nameOf}
-            onPersonMenu={openVolume}
-            onProfile={setProfileId}
-          />
-        ) : (
-          <div class="empty">
-            <div class="empty-ring">
-              <VolumeIcon size={34} />
+      <main class={`stage${chatConv ? ' with-chat' : ''}${chatConv && !(currentChannel && v.status !== 'idle') ? ' chat-only' : ''}`}>
+        <div class="stage-main">
+          {currentChannel && v.status !== 'idle' ? (
+            <VoiceStage
+              channel={currentChannel}
+              state={v}
+              people={peopleIn(currentChannel)}
+              nameOf={nameOf}
+              onPersonMenu={openVolume}
+              onProfile={setProfileId}
+              chatOpen={chatConv === `ch:${currentChannel.id}`}
+              chatUnread={store.unreadOf(`ch:${currentChannel.id}`).unread}
+              onToggleChat={() => setChatConv(chatConv === `ch:${currentChannel.id}` ? null : `ch:${currentChannel.id}`)}
+            />
+          ) : (
+            <div class="empty">
+              <div class="empty-ring">
+                <VolumeIcon size={34} />
+              </div>
+              <p>Выбери голосовой канал слева, чтобы зайти</p>
             </div>
-            <p>Выбери голосовой канал слева, чтобы зайти</p>
-          </div>
+          )}
+        </div>
+        {chatConv && (
+          <ChatPanel
+            conv={chatConv}
+            me={me.id}
+            canModerate={isStaff && chatConv.startsWith('ch:')}
+            person={chatPerson}
+            onClose={() => setChatConv(null)}
+            onProfile={setProfileId}
+            title={
+              chatConv.startsWith('ch:') ? (
+                <span class="chat-title-text">
+                  <span class="chat-hash mono">#</span>
+                  {channels.find((c) => `ch:${c.id}` === chatConv)?.name ?? 'канал'}
+                </span>
+              ) : (
+                (() => {
+                  const other = chatConv.slice(3).split('|').find((x) => x !== me.id) ?? me.id;
+                  const op = chatPerson(other);
+                  return (
+                    <span class="chat-title-text">
+                      <Avatar id={other} name={op.nickname} avatar={op.avatar} size={24} look={op.style} animated={false} />
+                      <Nick name={op.nickname} look={op.style} />
+                      <RoleTag role={op.role} />
+                      <span class="muted tiny mono">ЛИЧНО</span>
+                    </span>
+                  );
+                })()
+              )
+            }
+          />
         )}
       </main>
 
@@ -455,6 +621,19 @@ export function Main({
             setVolumeMenu(null);
           }}
           onClose={() => setVolumeMenu(null)}
+          myRole={myRole}
+          onToast={(m) => showToast(m)}
+        />
+      )}
+      {showMembers && (
+        <MembersView
+          me={me.id}
+          myRole={myRole}
+          extra={(id) => ({ prestige: profiles.get(id)?.prestige, style: profiles.get(id)?.style })}
+          onProfile={(id) => setProfileId(id)}
+          onMessage={(id) => openDm(id)}
+          onClose={() => setShowMembers(false)}
+          onToast={(m) => showToast(m)}
         />
       )}
       {profileId && (
@@ -464,6 +643,7 @@ export function Main({
           amAdmin={isAdmin}
           activity={profiles.get(profileId)?.activity ?? null}
           onClose={() => setProfileId(null)}
+          onMessage={profileId !== me.id ? () => openDm(profileId) : undefined}
         />
       )}
       {showSettings && <SettingsView session={session} onSession={onSession} onClose={() => setShowSettings(false)} />}
@@ -521,6 +701,9 @@ function ChannelList({
   onHover,
   onMove,
   onError,
+  unreadOf,
+  activeChat,
+  onChat,
   children,
 }: {
   children?: ComponentChildren;
@@ -535,6 +718,9 @@ function ChannelList({
   onHover: (info: HoverInfo | null) => void;
   onMove: (channelId: number, userId: string) => void;
   onError: (msg: string) => void;
+  unreadOf: (conv: string) => { unread: number; mentions: number };
+  activeChat: string | null;
+  onChat: (channelId: number) => void;
 }) {
   const [adding, setAdding] = useState(false);
   // Admin drag & drop: which channel the dragged person hovers over.
@@ -622,6 +808,22 @@ function ChannelList({
                 </span>
               )}
               <span class="channel-count mono">{people.length > 0 ? people.length : '—'}</span>
+              {(() => {
+                const u = unreadOf(`ch:${c.id}`);
+                return (
+                  <button
+                    class={`channel-chat${activeChat === `ch:${c.id}` ? ' active' : ''}${u.unread ? ' has-unread' : ''}`}
+                    title="Текстовый чат канала"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onChat(c.id);
+                    }}
+                  >
+                    <ChatIcon />
+                    {u.mentions > 0 ? <span class="badge-count hot">@{u.mentions}</span> : u.unread > 0 && <span class="badge-dot" />}
+                  </button>
+                );
+              })()}
               {isAdmin && (
                 <button
                   class="channel-delete"
@@ -640,7 +842,7 @@ function ChannelList({
                 {people.map((p) => (
                   <li
                     key={p.id}
-                    class={`member plate-${p.style?.plate ?? 'none'}${p.streaming && !p.isLocal ? ' can-watch' : ''}${p.speaking ? ' speaking' : ''}`}
+                    class={`member plate-${p.style?.plate ?? 'none'}${p.streaming && !p.isLocal ? ' can-watch' : ''}${p.speaking ? ' speaking' : ''}${p.connecting ? ' connecting' : ''}`}
                     style={lookVars(p.style)}
                     draggable={isAdmin}
                     onDragStart={(e) => {
@@ -677,16 +879,19 @@ function ChannelList({
                     <span class="member-main">
                       <span class="member-name">
                         <Nick name={p.nickname} look={p.style} />
+                        <RoleTag role={p.role} />
                         <LevelChip prestige={p.prestige} look={p.style} />
                       </span>
-                      {p.activity ? (
+                      {p.connecting ? (
+                        <span class="member-game connecting-text">подключение…</span>
+                      ) : p.activity ? (
                         <span class="member-game">🎮 {p.activity.game}</span>
                       ) : (
                         p.status?.text && <StatusLine status={p.status} class="member-game idle" />
                       )}
                     </span>
                     {p.streaming && <span class="live-badge">LIVE</span>}
-                    {p.micMuted && <MicOffIcon size={14} class="member-muted" />}
+                    {(p.micMuted || p.muted) && <MicOffIcon size={14} class={`member-muted${p.muted ? ' by-mod' : ''}`} />}
                   </li>
                 ))}
               </ul>
@@ -696,6 +901,65 @@ function ChannelList({
       })}
       {children}
     </nav>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 5h16v11H9l-5 4Z" />
+      <path d="M8 9.5h8M8 12.5h5" />
+    </svg>
+  );
+}
+
+/** Private conversations in the sidebar. */
+function DmList({
+  me,
+  dms,
+  active,
+  person,
+  online,
+  onOpen,
+}: {
+  me: string;
+  dms: { conv: string; with: string; unread: number; last: { text: string; author: string; attachment: unknown } | null }[];
+  active: string | null;
+  person: (id: string) => ChatPerson;
+  online: (id: string) => boolean;
+  onOpen: (conv: string) => void;
+}) {
+  if (dms.length === 0) return null;
+  return (
+    <div class="dm-list">
+      <div class="section-title">
+        <span>
+          ЛИЧНЫЕ <b>{String(dms.length).padStart(2, '0')}</b>
+        </span>
+      </div>
+      <ul class="members flat">
+        {dms.slice(0, 8).map((d) => {
+          const p = person(d.with);
+          const preview = d.last ? `${d.last.author === me ? 'Ты: ' : ''}${d.last.text || (d.last.attachment ? '🖼 картинка' : '')}` : '';
+          return (
+            <li
+              key={d.conv}
+              class={`member plate-none dm-row${active === d.conv ? ' active' : ''}${online(d.with) ? '' : ' offline'}`}
+              onClick={() => onOpen(d.conv)}
+            >
+              <Avatar id={d.with} name={p.nickname} avatar={p.avatar} size={24} look={p.style} animated={false} />
+              <span class="member-main">
+                <span class="member-name">
+                  <Nick name={p.nickname} look={p.style} />
+                </span>
+                <span class="member-game idle">{preview}</span>
+              </span>
+              {d.unread > 0 && <span class="badge-count hot">{d.unread}</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -710,15 +974,22 @@ function OnlineList({
   onHover: (info: HoverInfo | null) => void;
 }) {
   if (users.length === 0) return null;
+  // Staff get their own group on top, like in Discord.
+  const groups = [
+    { title: 'АДМИНИСТРАЦИЯ', list: users.filter((u) => u.role) },
+    { title: 'В СЕТИ', list: users.filter((u) => !u.role) },
+  ].filter((g) => g.list.length > 0);
   return (
     <div class="online-list">
+      {groups.map((g) => (
+      <div key={g.title}>
       <div class="section-title">
         <span>
-          В СЕТИ <b>{String(users.length).padStart(2, '0')}</b>
+          {g.title} <b>{String(g.list.length).padStart(2, '0')}</b>
         </span>
       </div>
       <ul class="members flat">
-        {users.map((u) => {
+        {g.list.map((u) => {
           const person: Person = {
             id: u.id,
             nickname: u.nickname,
@@ -762,6 +1033,7 @@ function OnlineList({
               <span class="member-main">
                 <span class="member-name">
                   <Nick name={u.nickname} look={u.style} />
+                  <RoleTag role={u.role} />
                   <LevelChip prestige={u.prestige} look={u.style} />
                 </span>
                 {u.activity ? (
@@ -774,11 +1046,12 @@ function OnlineList({
           );
         })}
       </ul>
+      </div>
+      ))}
     </div>
   );
 }
 
-const NS_SHORT: Record<string, string> = { max: 'МАКС', ai: 'ИИ', standard: 'СТАНДАРТ', off: 'ВЫКЛ' };
 
 /** Time since we entered this channel (remounts per channel). */
 function CallTimer() {
@@ -807,6 +1080,9 @@ function VoiceStage({
   nameOf,
   onPersonMenu,
   onProfile,
+  chatOpen,
+  chatUnread,
+  onToggleChat,
 }: {
   channel: Channel;
   state: VoiceState;
@@ -814,6 +1090,9 @@ function VoiceStage({
   nameOf: (id: string) => string;
   onPersonMenu: (e: MouseEvent, p: Person) => void;
   onProfile: (id: string) => void;
+  chatOpen: boolean;
+  chatUnread: number;
+  onToggleChat: () => void;
 }) {
   const [picker, setPicker] = useState(false);
   const watched = state.watching ? people.find((p) => p.id === state.watching) : undefined;
@@ -859,10 +1138,12 @@ function VoiceStage({
           <span>
             <b>{people.length}</b> В КАНАЛЕ
           </span>
-          <span>
-            ШУМОДАВ <b>{NS_SHORT[settings.get().noiseSuppression] ?? '—'}</b>
-          </span>
         </div>
+        <button class={`chat-toggle${chatOpen ? ' active' : ''}`} onClick={onToggleChat} title="Текстовый чат канала">
+          <ChatIcon />
+          <span class="mono">ЧАТ</span>
+          {chatUnread > 0 && !chatOpen && <span class="badge-count">{chatUnread}</span>}
+        </button>
       </header>
 
       {state.sharing && (
@@ -927,7 +1208,7 @@ function VoiceStage({
                 id={p.id}
                 name={p.nickname}
                 avatar={p.avatar}
-                size={watched ? 40 : TILE_AVATAR[gridSize(people.length)]}
+                size={watched ? 40 : Math.round(TILE_AVATAR[gridSize(people.length)] * (hasFrame(p.style?.frame) ? 0.62 : 1))}
                 speaking={p.speaking}
                 prestige={p.prestige}
                 look={p.style}
@@ -937,17 +1218,9 @@ function VoiceStage({
               />
               <div class="tile-name">
                 <Nick name={p.nickname} look={p.style} />
+                <RoleTag role={p.role} />
                 {p.isLocal && <span class="muted"> (ты)</span>}
-                {p.micMuted ? (
-                  <MicOffIcon size={14} class="member-muted" />
-                ) : (
-                  <span class={`eq${p.speaking ? ' on' : ''}`} aria-hidden="true">
-                    <i />
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                )}
+                {p.micMuted && <MicOffIcon size={14} class="member-muted" />}
               </div>
               {!watched && p.activity && <div class="tile-game">🎮 {p.activity.game}</div>}
               {!watched && !p.activity && p.status?.text && <StatusLine status={p.status} class="tile-game idle" />}
@@ -957,7 +1230,6 @@ function VoiceStage({
                   {p.quality && p.quality !== 'unknown' && (
                     <span class={`q-${p.quality}`}>● {QUALITY_SHORT[p.quality]?.toUpperCase()}</span>
                   )}
-                  {p.ns && <span>{NS_SHORT[p.ns] ?? p.ns}</span>}
                 </div>
               )}
               {!watched && <PinnedBadges codes={p.pinned} size={20} />}
@@ -1346,11 +1618,15 @@ function VolumePopover({
   isLocal,
   onProfile,
   onClose,
+  myRole,
+  onToast,
 }: {
   menu: VolumeMenu;
   isLocal: boolean;
   onProfile: () => void;
   onClose: () => void;
+  myRole: Role;
+  onToast: (m: string) => void;
 }) {
   const s = useSettings();
   const volume = s.userVolumes[menu.id] ?? 1;
@@ -1370,12 +1646,16 @@ function VolumePopover({
   }, [onClose]);
 
   // Keep the popover inside the window.
-  const left = Math.min(menu.x, window.innerWidth - 240);
-  const top = Math.min(menu.y, window.innerHeight - 140);
+  const withMod = !isLocal && canModerate(myRole, menu.role);
+  const left = Math.min(menu.x, window.innerWidth - 260);
+  const top = Math.min(menu.y, window.innerHeight - (withMod ? 330 : 140));
 
   return (
     <div class="popover" ref={ref} style={{ left, top }}>
-      <div class="popover-title">{menu.nickname}</div>
+      <div class="popover-title">
+        {menu.nickname} <RoleTag role={menu.role} />
+        {menu.muted && <span class="mod-flag">МУТ</span>}
+      </div>
       {!isLocal && (
         <label class="field">
           <span class="field-label">Громкость — {Math.round(volume * 100)}%</span>
@@ -1399,6 +1679,17 @@ function VolumePopover({
           </button>
         )}
       </div>
+      {withMod && (
+        <ModTools
+          target={{ id: menu.id, nickname: menu.nickname, role: menu.role, muted: menu.muted }}
+          me={myRole}
+          onDone={(m) => {
+            onToast(m);
+            onClose();
+          }}
+          onError={onToast}
+        />
+      )}
     </div>
   );
 }
@@ -1413,7 +1704,6 @@ interface HoverInfo {
 
 const QUALITY_SHORT: Record<string, string> = { excellent: 'отличная', good: 'хорошая', poor: 'плохая', lost: 'потеряна' };
 
-const NS_LABEL: Record<string, string> = { max: 'максимальный', ai: 'ИИ', standard: 'стандартный', off: 'выключен' };
 
 function durationText(since: number): string {
   const mins = Math.max(0, Math.floor((Date.now() - since) / 60_000));
@@ -1449,6 +1739,7 @@ function HoverCard({ info }: { info: HoverInfo }) {
       <div class="hovercard-body">
         <div class="hovercard-name">
           <Nick name={p.nickname} look={p.style} />
+          <RoleTag role={p.role} />
           {p.isLocal && <span class="muted"> (ты)</span>}
         </div>
         <UniqueTitles uniques={p.uniques} />
@@ -1473,7 +1764,6 @@ function HoverCard({ info }: { info: HoverInfo }) {
         <div class="hovercard-tags">
           {p.streaming && <span class="live-badge">LIVE</span>}
           {p.micMuted && <span class="tag">микрофон выключен</span>}
-          {p.ns && <span class={`tag ns ns-${p.ns}`}>шумодав: {NS_LABEL[p.ns] ?? p.ns}</span>}
           {!p.isLocal && p.quality && p.quality !== 'unknown' && (
             <span class={`tag q q-${p.quality}`}>связь: {QUALITY_SHORT[p.quality]}</span>
           )}

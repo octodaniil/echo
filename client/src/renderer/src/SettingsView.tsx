@@ -489,6 +489,8 @@ function AppTab({ session }: { session: Session }) {
         ))}
       </div>
 
+      {session.user.isAdmin && <ChatStorageAdmin />}
+
       <h3>Запуск</h3>
       <label class="switch-row">
         <span>
@@ -824,5 +826,50 @@ function HotkeysTab() {
       </div>
       <small class="muted">Esc — отменить запись, Backspace — убрать сочетание.</small>
     </div>
+  );
+}
+
+/** Admin: how much space chat pictures take on the server, and cleaning up old ones. */
+function ChatStorageAdmin() {
+  const [st, setSt] = useState<{ bytes: number; attachments: number; cap: number; messages: number } | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    void window.echo.chatStorage().then(setSt).catch(() => {});
+  }, []);
+  const gb = (b: number) => `${(b / 1024 ** 3).toFixed(b > 1024 ** 3 ? 1 : 2)} ГБ`;
+  const clean = async (days: number) => {
+    if (!confirm(`Удалить картинки из чатов старше ${days} дней? Сами сообщения останутся.`)) return;
+    try {
+      const r = await window.echo.chatCleanup(days);
+      setSt(r);
+      setMsg(`Удалено вложений: ${r.removed}`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    }
+  };
+  return (
+    <>
+      <h3>Чат на сервере</h3>
+      {st ? (
+        <div class="storage-card">
+          <div class="storage-bar">
+            <i style={{ width: `${Math.min(100, (st.bytes / st.cap) * 100)}%` }} />
+          </div>
+          <div class="muted tiny mono">
+            КАРТИНКИ {gb(st.bytes)} ИЗ {gb(st.cap)} · {st.attachments} ФАЙЛОВ · {st.messages} СООБЩЕНИЙ
+          </div>
+          <p class="muted tiny">
+            Текст хранится всегда. Когда картинки займут весь лимит, самые старые удалятся сами — в чате останется пометка.
+          </p>
+          <div class="storage-actions">
+            <button class="secondary small" onClick={() => void clean(180)}>Удалить картинки старше 180 дней</button>
+            <button class="secondary small" onClick={() => void clean(30)}>старше 30 дней</button>
+          </div>
+          {msg && <div class="success">{msg}</div>}
+        </div>
+      ) : (
+        <p class="muted">Загружаем…</p>
+      )}
+    </>
   );
 }

@@ -93,8 +93,21 @@ function beginSession(s: ActiveSession) {
     onMove(channelId, by) {
       send('move', { channelId, by });
     },
+    onBanned(message) {
+      banned = message;
+      send('banned', message);
+    },
+    onModeration(payload) {
+      send('moderation', payload);
+    },
+    onChat(event, payload) {
+      send(event === 'typing' ? 'chat-typing' : 'chat', payload);
+    },
   });
 }
+
+/** Ban message while we are banned (the session is kept so an unban just works). */
+let banned: string | null = null;
 
 async function endSession(reason: SessionEndReason) {
   stopEvents?.();
@@ -260,6 +273,48 @@ function registerIpc() {
     }),
   );
 
+  handle('banned:get', () => banned);
+  // ---------- chat ----------
+  const conv = (c: string) => encodeURIComponent(c);
+  handle('chat:history', (c: string, before?: number) =>
+    authed(requireSession(), `/api/chat/${conv(c)}?limit=50${before ? `&before=${before}` : ''}`),
+  );
+  handle('chat:send', (c: string, text: string, replyTo: number | null) =>
+    authed(requireSession(), `/api/chat/${conv(c)}`, { method: 'POST', body: { text, replyTo } }),
+  );
+  handle('chat:image', (c: string, data: Uint8Array, type: string, text: string, replyTo: number | null, w: number, h: number) =>
+    authed(requireSession(), `/api/chat/${conv(c)}/image`, {
+      method: 'POST',
+      raw: { data, type },
+      headers: {
+        'x-echo-text': encodeURIComponent(text),
+        'x-echo-reply': replyTo ? String(replyTo) : '',
+        'x-echo-w': String(w),
+        'x-echo-h': String(h),
+      },
+    }),
+  );
+  handle('chat:edit', (id: number, text: string) => authed(requireSession(), `/api/chat/message/${id}`, { method: 'PATCH', body: { text } }));
+  handle('chat:delete', (id: number) => authed(requireSession(), `/api/chat/message/${id}`, { method: 'DELETE' }));
+  handle('chat:read', (c: string, id: number) => authed(requireSession(), `/api/chat/${conv(c)}/read`, { method: 'POST', body: { id } }));
+  handle('chat:typing', (c: string) => authed(requireSession(), `/api/chat/${conv(c)}/typing`, { method: 'POST', body: {} }));
+  handle('chat:state', () => authed(requireSession(), '/api/chat-state'));
+  handle('chat:storage', () => authed(requireSession(), '/api/chat-storage'));
+  handle('chat:cleanup', (days: number) => authed(requireSession(), '/api/chat-storage/cleanup', { method: 'POST', body: { days } }));
+  handle('chat:clear', (c: string) => authed(requireSession(), `/api/chat/${conv(c)}`, { method: 'DELETE' }));
+  // Windows notifications: bring the window up when one is clicked; blink the taskbar.
+  handle('app:show', () => showWindow());
+  handle('app:flash', () => {
+    if (win && !win.isFocused()) win.flashFrame(true);
+  });
+  handle('members:list', async () => (await authed<{ members: unknown[] }>(requireSession(), '/api/members')).members);
+  handle('mod:action', (userId: string, action: string, body?: unknown) => {
+    const id = encodeURIComponent(userId);
+    if (action === 'nickname') return authed(requireSession(), `/api/mod/${id}/nickname`, { method: 'PATCH', body });
+    if (action === 'delete') return authed(requireSession(), `/api/users/${id}`, { method: 'DELETE' });
+    if (!['disconnect', 'mute', 'unmute', 'ban', 'unban', 'role', 'cosmetic'].includes(action)) throw new Error('Неизвестное действие');
+    return authed(requireSession(), `/api/mod/${id}/${action}`, { method: 'POST', body: body ?? {} });
+  });
   handle('channels:move', (channelId: number, userId: string) =>
     authed(requireSession(), `/api/channels/${channelId}/move`, { method: 'POST', body: { userId } }),
   );
@@ -399,7 +454,7 @@ app.on('before-quit', () => {
 
 app.whenReady().then(() => {
   // Only the microphone, screen capture and HTML fullscreen (watching streams) are allowed.
-  const allowed = new Set(['media', 'display-capture', 'fullscreen']);
+  const allowed = new Set(['notifications', 'media', 'display-capture', 'fullscreen']);
   electronSession.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
     callback(allowed.has(permission));
   });

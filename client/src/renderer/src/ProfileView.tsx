@@ -4,6 +4,7 @@ import { Badge, categories, RARITY_LABEL, UniqueTitles, useCatalog } from './Ach
 import { levelProgress, lookVars, RANK_NAMES } from './look';
 import { StatusLine } from './Status';
 import { GameCover } from './GameCover';
+import { hasFrame } from './Frames';
 import { Avatar, Nick } from './Avatar';
 import { bannerUrl } from './profile';
 import { CloseIcon } from './icons';
@@ -25,6 +26,7 @@ export function ProfileView({
   amAdmin,
   activity,
   onClose,
+  onMessage,
 }: {
   userId: string;
   meId: string;
@@ -32,6 +34,8 @@ export function ProfileView({
   /** What they're playing right now (from presence). */
   activity: Activity | null;
   onClose: () => void;
+  /** Open a private chat with this person (not shown on your own profile). */
+  onMessage?: () => void;
 }) {
   const baseCatalog = useCatalog();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -132,7 +136,7 @@ export function ProfileView({
                   id={profile.id}
                   name={profile.nickname}
                   avatar={profile.avatar}
-                  size={96}
+                  size={hasFrame(profile.style?.frame) ? 64 : 96}
                   prestige={profile.prestige}
                   look={profile.style}
                   status={profile.status?.state}
@@ -145,8 +149,13 @@ export function ProfileView({
                 </h2>
                 <StatusLine status={profile.status} class="profile-status" />
                 <UniqueTitles uniques={profile.uniques} />
+                {onMessage && (
+                  <button class="primary small profile-message" onClick={onMessage}>
+                    Написать
+                  </button>
+                )}
                 <div class="profile-chips">
-                  <span class="chip-static">в Echo с {formatDate(profile.createdAt)}</span>
+                  <span class="chip-static">в Echo с {new Date(profile.createdAt).toLocaleDateString('ru-RU')}</span>
                   {profile.isAdmin && <span class="chip-static admin">Админ</span>}
                   {profile.isModerator && !profile.isAdmin && <span class="chip-static moderator">Модератор</span>}
                   <span class="chip-static">

@@ -6,6 +6,8 @@ import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/700.css';
 import './styles.css';
 import './hud.css';
+import './chat.css';
+import './cosmetics.css';
 import { settings } from './settings';
 import { installThemes } from './themes';
 import { voice } from './voice';

@@ -1,0 +1,411 @@
+/* =====================================================================
+   Cosmetics 0.8: SVG frames, nameplates, nickname effects.
+   Animations run only under .fx-anim (big avatars) or on admin/mod
+   plates (a slow sheen); everything else is static.
+   ===================================================================== */
+
+/* ---------- frames ---------- */
+
+.frame-box {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+.frame-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  display: block;
+}
+/* the HUD ticks of 0.6 would clash with a drawn frame */
+.avatar-wrap.has-frame::before {
+  display: none !important;
+}
+.avatar-wrap.has-frame .lvl-num {
+  z-index: 4;
+}
+.fx-anim .fx-spin {
+  transform-origin: 100px 100px;
+  animation: fx-spin 14s linear infinite;
+}
+.fx-anim .fx-spin.fx-fast {
+  animation-duration: 6s;
+}
+.fx-anim .fx-spin.fx-slow {
+  animation-duration: 26s;
+}
+.fx-anim .fx-spin.fx-rev {
+  animation-direction: reverse;
+}
+@keyframes fx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.fx-anim .fx-pulse {
+  transform-origin: 100px 100px;
+  animation: fx-pulse 2s ease-in-out infinite;
+}
+@keyframes fx-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(1.04);
+  }
+}
+.fx-anim .fx-blink {
+  animation: fx-blink 1.2s steps(2) infinite;
+}
+@keyframes fx-blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+.fx-anim .fx-flow {
+  animation: fx-flow 2.4s linear infinite;
+}
+.fx-anim .fx-flow.fx-quick {
+  animation-duration: 1.6s;
+}
+@keyframes fx-flow {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+.fx-anim .fx-twinkle {
+  animation: fx-twinkle 2.6s ease-in-out infinite;
+}
+@keyframes fx-twinkle {
+  50% {
+    opacity: 0.15;
+  }
+}
+.fx-anim .fx-bars rect {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: fx-bar 0.9s ease-in-out infinite;
+}
+@keyframes fx-bar {
+  50% {
+    transform: scaleY(0.3);
+  }
+}
+.fx-anim .fx-flick {
+  transform-origin: 100px 100px;
+  animation: fx-flick 0.5s ease-in-out infinite alternate;
+}
+@keyframes fx-flick {
+  to {
+    transform: scale(1.03) rotate(1.5deg);
+    opacity: 0.8;
+  }
+}
+
+/* compact frame in lists: a thin ring in the frame's color, room reserved by margin */
+.avatar-wrap.mini-frame::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * (var(--ring) + var(--gap) + 3px));
+  border-radius: 50%;
+  border: 1.5px solid var(--fc);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--fc) 55%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+.avatar-wrap.mini-frame.speaking::after {
+  animation: none;
+  transform: none;
+  opacity: 1;
+}
+
+/* ---------- nameplates (rows in member lists) ---------- */
+
+.member.plate-line {
+  background: rgba(80, 220, 255, 0.05);
+  box-shadow: inset 2px 0 0 var(--rc);
+}
+.member.plate-gradient {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--rc) 20%, transparent), color-mix(in srgb, var(--accent-2) 10%, transparent) 60%, transparent);
+}
+.member.plate-scanline {
+  background:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--rc) 13%, transparent) 0 1px, transparent 1px 3px),
+    linear-gradient(90deg, color-mix(in srgb, var(--rc) 17%, transparent), transparent 85%);
+  box-shadow: inset 2px 0 0 var(--rc);
+}
+.member.plate-datastream {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 14px, rgba(255, 92, 154, 0.35) 14px 16px, transparent 16px 40px),
+    linear-gradient(90deg, rgba(255, 92, 154, 0.2), transparent 80%);
+  box-shadow: inset 2px 0 0 #ff5c9a;
+}
+.member.plate-horizon {
+  background:
+    radial-gradient(150px 46px at 88% 50%, rgba(180, 140, 255, 0.45), transparent 70%),
+    radial-gradient(28px 14px at 88% 50%, #000 60%, transparent 64%),
+    linear-gradient(90deg, #07040f, #140a28);
+  box-shadow: inset 0 0 0 1px rgba(180, 140, 255, 0.4);
+}
+.member.plate-stars {
+  background:
+    radial-gradient(1px 1px at 12% 30%, #fff, transparent),
+    radial-gradient(1px 1px at 38% 72%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1.5px 1.5px at 63% 26%, #fff, transparent),
+    radial-gradient(1px 1px at 86% 64%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 74% 18%, #fff, transparent),
+    radial-gradient(110px 36px at 96% 0%, rgba(255, 230, 160, 0.25), transparent),
+    linear-gradient(90deg, #0e1745, #1d0e3a);
+}
+.member.plate-flame {
+  background:
+    radial-gradient(130px 50px at 0% 110%, rgba(255, 110, 20, 0.6), transparent 70%),
+    radial-gradient(80px 34px at 30% 130%, rgba(255, 210, 80, 0.45), transparent 70%),
+    linear-gradient(90deg, #2a0d02, #120604 80%);
+  box-shadow: inset 2px 0 0 #ff7a1a;
+}
+.member.plate-air {
+  background:
+    radial-gradient(circle at 92% 50%, rgba(255, 61, 139, 0.6) 0 3px, transparent 4px),
+    repeating-radial-gradient(circle at 92% 50%, transparent 0 9px, rgba(255, 61, 139, 0.22) 9px 10px, transparent 10px 18px),
+    linear-gradient(90deg, rgba(255, 61, 139, 0.15), transparent 80%);
+  box-shadow: inset 2px 0 0 #ff3d8b;
+}
+
+/* --- admin: "Золотой код" — circuitry, crown, gold frame, slow sheen --- */
+.member.plate-goldcode,
+.member.plate-shield {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.member.plate-goldcode > *,
+.member.plate-shield > * {
+  position: relative;
+  z-index: 2;
+}
+.member.plate-goldcode {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M30 4l3 7 7-3-3 7 3 7-7-3-3 7-3-7-7 3 3-7-3-7 7 3z' fill='%23ffc24a' fill-opacity='.0'/%3E%3Cpath d='M4 30 L8 18 L14 25 L20 14 L26 25 L32 18 L36 30 Z' fill='%23ffc24a' fill-opacity='.22' stroke='%23ffd77a' stroke-opacity='.45'/%3E%3C/svg%3E")
+      right 8px center / 30px 30px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Cg fill='none' stroke='%23ffc24a' stroke-opacity='.38' stroke-width='1'%3E%3Cpath d='M0 10H22V4H48V14H70V8H96V20H120'/%3E%3Cpath d='M0 30H16V36H40V26H64V32H86V24H120'/%3E%3Cpath d='M48 14V26M86 24V20'/%3E%3C/g%3E%3Cg fill='%23ffe08a' fill-opacity='.7'%3E%3Ccircle cx='22' cy='10' r='1.6'/%3E%3Ccircle cx='70' cy='14' r='1.6'/%3E%3Ccircle cx='40' cy='36' r='1.6'/%3E%3Ccircle cx='86' cy='24' r='1.6'/%3E%3C/g%3E%3C/svg%3E")
+      left center / 120px 100% repeat-x,
+    radial-gradient(120px 40px at 0% 50%, rgba(255, 194, 74, 0.5), transparent 70%),
+    linear-gradient(90deg, rgba(74, 48, 6, 0.96), rgba(24, 15, 2, 0.95) 55%, rgba(44, 28, 4, 0.95));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 194, 74, 0.7),
+    inset 3px 0 0 #ffc24a,
+    inset 0 0 18px rgba(255, 170, 40, 0.22);
+  color: #fff;
+}
+.member.plate-goldcode::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 240, 190, 0.38) 50%, transparent 70%);
+  background-size: 260% 100%;
+  animation: plate-sheen 5s linear infinite;
+  pointer-events: none;
+}
+.member.plate-goldcode::after {
+  content: 'ROOT';
+  position: absolute;
+  right: 44px;
+  top: 3px;
+  z-index: 1;
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: rgba(255, 210, 120, 0.55);
+  pointer-events: none;
+}
+@keyframes plate-sheen {
+  from {
+    background-position: 160% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* --- moderator: "Щит" — hex lattice, shield, scanning beam, electric edges --- */
+.member.plate-shield {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='34' viewBox='0 0 30 34'%3E%3Cpath d='M15 2 L27 7 V16 C27 24 21 29 15 32 C9 29 3 24 3 16 V7 Z' fill='%233a8bff' fill-opacity='.25' stroke='%238fe3ff' stroke-opacity='.6'/%3E%3Cpath d='M10 16 l4 4 7-8' fill='none' stroke='%23d6f6ff' stroke-opacity='.75' stroke-width='2'/%3E%3C/svg%3E")
+      right 8px center / 26px 30px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='31'%3E%3Cpath d='M9 0l9 5.2v10.4L9 20.8 0 15.6V5.2zM9 20.8V31' fill='none' stroke='%235ab4ff' stroke-opacity='.32'/%3E%3C/svg%3E")
+      left top / 18px 31px repeat,
+    radial-gradient(120px 40px at 0% 50%, rgba(58, 139, 255, 0.55), transparent 70%),
+    linear-gradient(90deg, rgba(10, 40, 92, 0.96), rgba(4, 14, 34, 0.96) 60%, rgba(8, 26, 60, 0.95));
+  box-shadow:
+    inset 0 0 0 1px rgba(90, 180, 255, 0.7),
+    inset 3px 0 0 #3a8bff,
+    inset 0 0 18px rgba(58, 139, 255, 0.22);
+  color: #fff;
+}
+.member.plate-shield::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 46px;
+  z-index: 1;
+  background: linear-gradient(90deg, transparent, rgba(143, 227, 255, 0.55), transparent);
+  animation: plate-scan 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.member.plate-shield::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg, #8fe3ff 0 18px, transparent 18px) top left / 100% 1px no-repeat,
+    linear-gradient(90deg, transparent calc(100% - 18px), #8fe3ff calc(100% - 18px)) bottom left / 100% 1px no-repeat;
+  opacity: 0.8;
+  pointer-events: none;
+}
+@keyframes plate-scan {
+  from {
+    transform: translateX(-60px);
+  }
+  to {
+    transform: translateX(320px);
+  }
+}
+.member.plate-goldcode:hover,
+.member.plate-shield:hover {
+  filter: brightness(1.15);
+}
+
+/* ---------- nickname effects ---------- */
+
+.nfx-glow {
+  color: color-mix(in srgb, var(--rc) 40%, #fff);
+  text-shadow: 0 0 9px color-mix(in srgb, var(--rc) 80%, transparent);
+}
+.nfx-chrome {
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 750;
+  background-image: linear-gradient(180deg, #fff 0%, #b7c6d8 45%, #3d4b5e 50%, #cfe0f2 75%, #fff 100%);
+  filter: drop-shadow(0 0 5px rgba(180, 140, 255, 0.55));
+}
+.nfx-crown,
+.nfx-guard {
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+}
+.nfx-crown {
+  background-image: linear-gradient(90deg, #fff1b8, #ffc24a 35%, #ff8a00 60%, #fff1b8);
+  background-size: 200% 100%;
+  animation: nfx-sheen 3s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(255, 170, 40, 0.75));
+}
+/* moderator: electric ice-chrome with a light bar running down the letters */
+.nfx-guard {
+  position: relative;
+  background-image: linear-gradient(180deg, #ffffff 0%, #e4f9ff 38%, #9ad8ff 52%, #5ab4ff 60%, #e2f7ff 100%);
+  /* crisp dark edge first (readable at 13px), then the blue glow */
+  filter: drop-shadow(0 0 0.6px #062a5c) drop-shadow(0 0 0.6px #062a5c) drop-shadow(0 0 5px rgba(58, 139, 255, 0.75));
+  letter-spacing: 0.02em;
+}
+.nfx-guard::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(180deg, transparent 42%, rgba(255, 255, 255, 0.95) 50%, transparent 58%);
+  background-size: 100% 300%;
+  animation: nfx-guard-scan 2.2s linear infinite;
+}
+@keyframes nfx-guard-scan {
+  from {
+    background-position: 0 100%;
+  }
+  to {
+    background-position: 0 -100%;
+  }
+}
+@keyframes nfx-sheen {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* ---------- Style tab groups ---------- */
+
+.cosmetic-group {
+  margin: 14px 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--muted);
+}
+.cosmetic-group::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--line-hi), transparent);
+}
+.cosmetic-group.level {
+  color: var(--accent);
+}
+.cosmetic-group.achievement {
+  color: #ff9cf0;
+}
+.cosmetic-group.exclusive {
+  color: #ffc24a;
+}
+.cosmetics.frames {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.cosmetic .cosmetic-preview.frame-preview {
+  height: 120px;
+}
+.cosmetic.exclusive {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 194, 74, 0.55),
+    inset 0 0 20px rgba(255, 194, 74, 0.08);
+}
+.cosmetic-lock.role {
+  color: #ffc24a;
+}
+.plate-swatch {
+  display: block;
+  height: 34px;
+}
+
+.mod-btn.grant {
+  text-align: left;
+}
+.mod-btn.grant.on {
+  color: #1d1300;
+  background: linear-gradient(90deg, #ffe08a, #ff9d2e);
+}
+
+/* bottom-left card: long nick truncates, the role tag stays whole */
+.userbar .nick {
+  min-width: 0;
+}
+.userbar .nick > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.userbar .nick .role-tag {
+  flex-shrink: 0;
+}

@@ -183,6 +183,22 @@ const KNOWN: Record<string, string> = {
 };
 
 /** Known games for the settings list: unique names, each with its executables. */
+/**
+ * Launchers, chat apps, browsers and tools are never "a game", even if someone added
+ * them as their own game (Steam showed up as "playing Steam" this way).
+ */
+const NOT_GAMES = new Set([
+  'steam.exe', 'steamwebhelper.exe', 'steamservice.exe',
+  'epicgameslauncher.exe', 'epicwebhelper.exe', 'battle.net.exe', 'agent.exe',
+  'eadesktop.exe', 'origin.exe', 'ubisoftconnect.exe', 'upc.exe', 'galaxyclient.exe',
+  'riotclientservices.exe', 'riotclientux.exe', 'riotclientuxrender.exe', 'leagueclient.exe', 'leagueclientux.exe',
+  'xboxpcapp.exe', 'gamebar.exe', 'playnite.desktopapp.exe', 'lghub.exe', 'nvidia app.exe', 'nvcontainer.exe',
+  'discord.exe', 'telegram.exe', 'whatsapp.exe', 'teamspeak3.exe', 'ts3client_win64.exe', 'skype.exe', 'zoom.exe',
+  'chrome.exe', 'msedge.exe', 'firefox.exe', 'opera.exe', 'opera_gx.exe', 'browser.exe', 'brave.exe', 'yandex.exe',
+  'code.exe', 'obs64.exe', 'obs32.exe', 'spotify.exe', 'notepad.exe', 'explorer.exe', 'taskmgr.exe',
+  'echo.exe', 'electron.exe',
+]);
+
 export function knownGames(): { name: string; exes: string[] }[] {
   const byName = new Map<string, string[]>();
   for (const [exe, name] of Object.entries(KNOWN)) byName.set(name, [...(byName.get(name) ?? []), exe]);
@@ -206,7 +222,7 @@ function listProcesses(): Promise<string[]> {
 
 export async function detectGame(config: GamesConfig): Promise<string | null> {
   const running = await listProcesses();
-  for (const exe of running) if (config.custom[exe]) return config.custom[exe]!;
+  for (const exe of running) if (config.custom[exe] && !NOT_GAMES.has(exe)) return config.custom[exe]!;
   for (const exe of running) if (KNOWN[exe]) return KNOWN[exe]!;
   return null;
 }
@@ -221,8 +237,8 @@ export function listWindowedApps(): Promise<{ exe: string; title: string }[]> {
       try {
         const parsed = JSON.parse(out) as { exe: string; title: string } | { exe: string; title: string }[];
         const list = (Array.isArray(parsed) ? parsed : [parsed]).map((a) => ({ exe: a.exe.toLowerCase(), title: a.title }));
-        const skip = new Set(['echo.exe', 'electron.exe', 'explorer.exe', 'applicationframehost.exe', 'textinputhost.exe']);
-        resolve(list.filter((a) => !skip.has(a.exe)));
+        const skip = new Set(['applicationframehost.exe', 'textinputhost.exe', 'systemsettings.exe']);
+        resolve(list.filter((a) => !skip.has(a.exe) && !NOT_GAMES.has(a.exe)));
       } catch {
         resolve([]);
       }

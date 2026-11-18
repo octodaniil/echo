@@ -11,10 +11,10 @@ export class ApiError extends Error {
 export async function request<T>(
   serverUrl: string,
   path: string,
-  opts: { method?: string; token?: string; body?: unknown; raw?: { data: Uint8Array; type: string } } = {},
+  opts: { method?: string; token?: string; body?: unknown; raw?: { data: Uint8Array; type: string }; headers?: Record<string, string> } = {},
 ): Promise<T> {
   let res: Response;
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...opts.headers };
   if (opts.token) headers.authorization = `Bearer ${opts.token}`;
   let body: BodyInit | undefined;
   if (opts.raw) {
@@ -30,7 +30,8 @@ export async function request<T>(
       method: opts.method ?? 'GET',
       headers,
       body,
-      signal: AbortSignal.timeout(10_000),
+      // Uploads (chat images) may take longer than plain calls.
+      signal: AbortSignal.timeout(opts.raw ? 60_000 : 10_000),
     });
   } catch (err) {
     console.warn(`[api] ${opts.method ?? 'GET'} ${serverUrl}${path} failed:`, err);
@@ -53,6 +54,6 @@ export async function request<T>(
 export const authed = <T>(
   s: ActiveSession,
   path: string,
-  opts: { method?: string; body?: unknown; raw?: { data: Uint8Array; type: string } } = {},
+  opts: { method?: string; body?: unknown; raw?: { data: Uint8Array; type: string }; headers?: Record<string, string> } = {},
 ) =>
   request<T>(s.serverUrl, path, { ...opts, token: s.token });
