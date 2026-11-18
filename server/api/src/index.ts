@@ -1,8 +1,10 @@
 import Fastify from 'fastify';
 import { startAchievementClock } from './achievements.ts';
 import { HttpError } from './auth.ts';
+import { startBackups } from './backup.ts';
 import { config } from './config.ts';
-import { startPresence } from './presence.ts';
+import { applyVoicePermission, scheduleAllUnmutes, setMuteExpiryHandler } from './moderation.ts';
+import { broadcastChannels, broadcastPresence, roomsOf, sendTo, startPresence } from './presence.ts';
 import { registerRoutes } from './routes.ts';
 
 const app = Fastify({
@@ -23,6 +25,15 @@ app.setErrorHandler((err, req, reply) => {
 await registerRoutes(app);
 await app.listen({ host: config.host, port: config.port });
 startPresence(app.log);
+// Mutes with a time limit end by themselves (also after a restart).
+setMuteExpiryHandler((userId) => {
+  void applyVoicePermission(userId, roomsOf(userId), true);
+  sendTo(userId, 'moderation', { action: 'unmute', by: null });
+  broadcastChannels();
+  broadcastPresence();
+});
+scheduleAllUnmutes();
+startBackups(app.log);
 startAchievementClock();
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

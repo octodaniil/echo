@@ -14,66 +14,93 @@ export interface Unlock {
   achievement?: string;
   /** Hold any one-of-a-kind achievement. */
   unique?: boolean;
+  /** Only for the admin, or for staff (admin + moderators). The admin can also grant it. */
+  role?: 'admin' | 'staff';
 }
+
+/** Where an item shows up in the Style tab. */
+export type Group = 'basic' | 'level' | 'achievement' | 'exclusive';
 
 export interface Cosmetic {
   id: string;
   slot: Slot;
   title: string;
+  group: Group;
   unlock: Unlock;
 }
 
 export const SLOTS: { id: Slot; title: string }[] = [
-  { id: 'ring', title: 'Цвет кольца' },
   { id: 'frame', title: 'Рамка аватара' },
+  { id: 'plate', title: 'Фон строки' },
   { id: 'name', title: 'Эффект ника' },
-  { id: 'plate', title: 'Фон в списке' },
+  { id: 'ring', title: 'Цвет кольца уровня' },
 ];
 
 const free: Unlock = {};
+const item = (slot: Slot, id: string, title: string, group: Group, unlock: Unlock = free): Cosmetic => ({ id, slot, title, group, unlock });
 
 export const COSMETICS: Cosmetic[] = [
-  // Level ring colors ("accent" follows the theme).
-  { id: 'accent', slot: 'ring', title: 'Цвет темы', unlock: free },
-  { id: 'cyan', slot: 'ring', title: 'Циан', unlock: free },
-  { id: 'violet', slot: 'ring', title: 'Фиалка', unlock: free },
-  { id: 'lime', slot: 'ring', title: 'Лайм', unlock: free },
-  { id: 'rose', slot: 'ring', title: 'Роза', unlock: { level: 3 } },
-  { id: 'amber', slot: 'ring', title: 'Янтарь', unlock: { level: 5 } },
-  { id: 'white', slot: 'ring', title: 'Белый шум', unlock: { level: 7 } },
-  { id: 'aurora', slot: 'ring', title: 'Аврора', unlock: { level: 9 } },
-  { id: 'plasma', slot: 'ring', title: 'Плазма', unlock: { level: 13 } },
-  { id: 'void', slot: 'ring', title: 'Горизонт событий', unlock: { level: 17 } },
-  { id: 'ember', slot: 'ring', title: 'Угли', unlock: { achievement: 'streak_30' } },
-  { id: 'prism', slot: 'ring', title: 'Призма', unlock: { unique: true } },
+  // ---- level ring colors ("accent" follows the theme)
+  item('ring', 'accent', 'Цвет темы', 'basic'),
+  item('ring', 'cyan', 'Циан', 'basic'),
+  item('ring', 'violet', 'Фиалка', 'basic'),
+  item('ring', 'lime', 'Лайм', 'basic'),
+  item('ring', 'rose', 'Роза', 'level', { level: 3 }),
+  item('ring', 'amber', 'Янтарь', 'level', { level: 5 }),
+  item('ring', 'white', 'Белый шум', 'level', { level: 7 }),
+  item('ring', 'aurora', 'Аврора', 'level', { level: 9 }),
+  item('ring', 'plasma', 'Плазма', 'level', { level: 13 }),
+  item('ring', 'void', 'Горизонт событий', 'level', { level: 17 }),
+  item('ring', 'ember', 'Угли', 'achievement', { achievement: 'streak_30' }),
+  item('ring', 'prism', 'Призма', 'achievement', { unique: true }),
 
-  // Avatar frames.
-  { id: 'none', slot: 'frame', title: 'Без рамки', unlock: free },
-  { id: 'neon', slot: 'frame', title: 'Неон', unlock: { level: 3 } },
-  { id: 'circuit', slot: 'frame', title: 'Схема', unlock: { level: 6 } },
-  { id: 'orbit', slot: 'frame', title: 'Орбита', unlock: { level: 9 } },
-  { id: 'glitch', slot: 'frame', title: 'Глитч', unlock: { level: 12 } },
-  { id: 'radar', slot: 'frame', title: 'Радар', unlock: { achievement: 'night_owl_10' } },
-  { id: 'eclipse', slot: 'frame', title: 'Затмение', unlock: { level: 17 } },
-  { id: 'crown', slot: 'frame', title: 'Корона', unlock: { unique: true } },
+  // ---- avatar frames
+  item('frame', 'none', 'Без рамки', 'basic'),
+  item('frame', 'contour', 'Контур', 'basic'),
+  item('frame', 'brackets', 'Скобки', 'basic'),
+  item('frame', 'dotted', 'Пунктир', 'basic'),
+  item('frame', 'scale', 'Шкала', 'basic'),
+  item('frame', 'radar', 'Пеленг', 'level', { level: 3 }),
+  item('frame', 'resonator', 'Резонатор', 'level', { level: 5 }),
+  item('frame', 'impulse', 'Импульсный контур', 'level', { level: 9 }),
+  item('frame', 'accretion', 'Аккреционный диск', 'level', { level: 13 }),
+  item('frame', 'horizon', 'Горизонт событий', 'level', { level: 17 }),
+  item('frame', 'owl', 'Полуночник', 'achievement', { achievement: 'night_owl_10' }),
+  item('frame', 'eternal', 'Неугасимый', 'achievement', { achievement: 'streak_30' }),
+  item('frame', 'onair', 'Прямой эфир', 'achievement', { achievement: 'stream_50' }),
+  item('frame', 'legend', 'Голос легенды', 'achievement', { achievement: 'voice_100h' }),
+  item('frame', 'five', 'Пятёрка', 'achievement', { achievement: 'squad_5' }),
+  item('frame', 'prism', 'Призма', 'achievement', { unique: true }),
+  item('frame', 'architect', 'Архитектор', 'exclusive', { role: 'admin' }),
+  item('frame', 'guardian', 'Страж', 'exclusive', { role: 'staff' }),
 
-  // Nickname effects.
-  { id: 'none', slot: 'name', title: 'Обычный', unlock: free },
-  { id: 'glow', slot: 'name', title: 'Свечение', unlock: { level: 4 } },
-  { id: 'gradient', slot: 'name', title: 'Градиент', unlock: { level: 8 } },
-  { id: 'scan', slot: 'name', title: 'Сканер', unlock: { level: 11 } },
-  { id: 'glitch', slot: 'name', title: 'Глитч', unlock: { level: 15 } },
-  { id: 'holo', slot: 'name', title: 'Голограмма', unlock: { unique: true } },
+  // ---- nameplates (row background in lists)
+  item('plate', 'none', 'Без фона', 'basic'),
+  item('plate', 'line', 'Линия', 'basic'),
+  item('plate', 'gradient', 'Градиент', 'basic'),
+  item('plate', 'scanline', 'Развёртка', 'level', { level: 5 }),
+  item('plate', 'datastream', 'Поток данных', 'level', { level: 9 }),
+  item('plate', 'horizon', 'Горизонт', 'level', { level: 17 }),
+  item('plate', 'stars', 'Ночное небо', 'achievement', { achievement: 'new_year' }),
+  item('plate', 'flame', 'Пламя', 'achievement', { achievement: 'streak_30' }),
+  item('plate', 'air', 'Эфир', 'achievement', { achievement: 'stream_50' }),
+  item('plate', 'goldcode', 'Золотой код', 'exclusive', { role: 'admin' }),
+  item('plate', 'shield', 'Щит', 'exclusive', { role: 'staff' }),
 
-  // Nameplate behind the row in member lists.
-  { id: 'none', slot: 'plate', title: 'Без фона', unlock: free },
-  { id: 'grid', slot: 'plate', title: 'Сетка', unlock: { level: 5 } },
-  { id: 'scanline', slot: 'plate', title: 'Развёртка', unlock: { level: 10 } },
-  { id: 'aurora', slot: 'plate', title: 'Аврора', unlock: { level: 14 } },
-  { id: 'stars', slot: 'plate', title: 'Звёзды', unlock: { achievement: 'new_year' } },
-  { id: 'sunrise', slot: 'plate', title: 'Рассвет', unlock: { achievement: 'early_bird' } },
-  { id: 'stream', slot: 'plate', title: 'Эфир', unlock: { achievement: 'stream_50' } },
+  // ---- nickname effects
+  item('name', 'none', 'Обычный', 'basic'),
+  item('name', 'glow', 'Свечение', 'basic'),
+  item('name', 'gradient', 'Градиент', 'basic'),
+  item('name', 'scan', 'Сканер', 'level', { level: 9 }),
+  item('name', 'glitch', 'Глитч', 'level', { level: 13 }),
+  item('name', 'chrome', 'Хром', 'level', { level: 17 }),
+  item('name', 'holo', 'Голограмма', 'achievement', { unique: true }),
+  item('name', 'crown', 'Корона', 'exclusive', { role: 'admin' }),
+  item('name', 'guard', 'Страж', 'exclusive', { role: 'staff' }),
 ];
+
+/** Items the admin can hand out manually ("slot:id"). */
+export const GRANTABLE = COSMETICS.filter((x) => x.group === 'exclusive').map((x) => `${x.slot}:${x.id}`);
 
 export interface Style {
   ring: string;
@@ -86,12 +113,34 @@ export const DEFAULT_STYLE: Style = { ring: 'accent', frame: 'none', name: 'none
 
 const find = (slot: Slot, id: string) => COSMETICS.find((c) => c.slot === slot && c.id === id);
 
-export function isUnlocked(c: Cosmetic, prestige: Prestige, owned: Set<string>, hasUnique: boolean): boolean {
+export function isUnlocked(c: Cosmetic, prestige: Prestige, owned: Set<string>, hasUnique: boolean, role: 0 | 1 | 2 = 0): boolean {
   const u = c.unlock;
+  if (u.role === 'admin' && role < 2) return false;
+  if (u.role === 'staff' && role < 1) return false;
   if (u.level && prestige.level < u.level) return false;
   if (u.achievement && !owned.has(u.achievement)) return false;
   if (u.unique && !hasUnique) return false;
   return true;
+}
+
+export function parseGrants(json: string | null | undefined): Set<string> {
+  try {
+    const v = JSON.parse(json ?? '[]') as unknown;
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && GRANTABLE.includes(x)) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Admin gives or takes an exclusive item. */
+export function setGrant(userId: string, key: string, on: boolean) {
+  if (!GRANTABLE.includes(key)) throw new Error('Этот предмет нельзя выдать вручную');
+  const row = queries.userById.get(userId) as User | undefined;
+  const set = parseGrants(row?.cosmetics_granted);
+  if (on) set.add(key);
+  else set.delete(key);
+  queries.setGrants.run(JSON.stringify([...set]), userId);
+  return [...set];
 }
 
 function parseStyle(json: string | null | undefined): Partial<Style> {
@@ -107,10 +156,15 @@ function parseStyle(json: string | null | undefined): Partial<Style> {
 export function styleContext() {
   const prestige = prestigeMap();
   const owned = ownedMap();
-  // The admin (server owner) has everything open, no grinding needed.
-  const admins = new Set((queries.listUsers.all() as unknown as User[]).filter((u) => u.is_admin).map((u) => u.id));
-  const open = (userId: string, c: Cosmetic, p: Prestige, have: Set<string>, hasUnique: boolean) =>
-    admins.has(userId) || isUnlocked(c, p, have, hasUnique);
+  // The admin (server owner) has everything open, no grinding needed. Moderators get the
+  // staff items; anyone can additionally hold exclusive items the admin granted to them.
+  const users = queries.listUsers.all() as unknown as User[];
+  const roles = new Map(users.map((u) => [u.id, (u.is_admin ? 2 : u.is_moderator ? 1 : 0) as 0 | 1 | 2]));
+  const grants = new Map(users.map((u) => [u.id, parseGrants(u.cosmetics_granted)]));
+  const open = (userId: string, x: Cosmetic, p: Prestige, have: Set<string>, hasUnique: boolean) =>
+    roles.get(userId) === 2 ||
+    !!grants.get(userId)?.has(`${x.slot}:${x.id}`) ||
+    isUnlocked(x, p, have, hasUnique, roles.get(userId) ?? 0);
   return {
     /** Equipped style, with anything no longer unlocked falling back to the default. */
     resolve(userId: string, json: string | null | undefined): Style {

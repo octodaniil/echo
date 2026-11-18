@@ -119,6 +119,24 @@ switch (command) {
     break;
   }
 
+  case 'backup': {
+    const { backupNow, backupDir } = await import('./backup.ts');
+    console.log(`Бэкап готов: ${backupNow()}
+Все копии: ${backupDir}`);
+    break;
+  }
+
+  case 'unban': {
+    const user = queries.userByNickname.get(rest.join(' ')) as User | undefined;
+    if (!user) {
+      console.error('Использование: unban <ник>');
+      process.exit(1);
+    }
+    queries.setBan.run(null, null, user.id);
+    console.log(`${user.nickname} разблокирован`);
+    break;
+  }
+
   default:
     console.log(`Команды:
   invite [--admin] [--uses N] [--hours H]   создать инвайт
@@ -129,6 +147,8 @@ switch (command) {
   revoke <ник> <код>                        забрать ачивку
   achievements                              список ачивок
   role <ник> moderator|member               назначить / снять модератора
-  channels                                  список каналов`);
+  channels                                  список каналов
+  backup                                    сделать бэкап базы сейчас
+  unban <ник>                               снять бан (если забанили по ошибке)`);
     process.exit(command ? 1 : 0);
 }

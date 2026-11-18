@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { banMessage, isBanned } from './moderation.ts';
 import type { FastifyRequest } from 'fastify';
 import { award } from './achievements.ts';
 import { queries, transaction, type Invite, type User } from './db.ts';
@@ -73,6 +74,7 @@ export async function requireUser(req: FastifyRequest): Promise<void> {
   if (!token) throw new HttpError(401, 'Нужна авторизация');
   const user = queries.userByTokenHash.get(hashToken(token)) as User | undefined;
   if (!user) throw new HttpError(401, 'Сессия недействительна');
+  if (isBanned(user)) throw new HttpError(403, banMessage(user));
   req.user = user;
 
   // Record activity at most once a minute.
@@ -81,6 +83,12 @@ export async function requireUser(req: FastifyRequest): Promise<void> {
     lastTouch.set(user.id, now);
     queries.touchUser.run(now, user.id);
   }
+}
+
+/** Admin or moderator. */
+export async function requireStaff(req: FastifyRequest): Promise<void> {
+  await requireUser(req);
+  if (!req.user.is_admin && !req.user.is_moderator) throw new HttpError(403, 'Только для админа и модераторов');
 }
 
 export async function requireAdmin(req: FastifyRequest): Promise<void> {

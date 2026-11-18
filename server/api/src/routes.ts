@@ -19,8 +19,20 @@ import {
   revoke,
   setPinned,
 } from './achievements.ts';
-import { equip, parseStatus, setStatus, SLOTS, styleContext, styleOf } from './cosmetics.ts';
-import { createInvite, HttpError, publicUser, redeemInvite, requireAdmin, requireUser } from './auth.ts';
+import * as chat from './chat.ts';
+import { equip, GRANTABLE, parseGrants, parseStatus, setGrant, setStatus, SLOTS, styleContext, styleOf } from './cosmetics.ts';
+import { createInvite, HttpError, publicUser, redeemInvite, requireAdmin, requireStaff, requireUser } from './auth.ts';
+import {
+  applyVoicePermission,
+  banMessage,
+  isBanned,
+  isMuted,
+  MOD_MAX_MUTE_MIN,
+  PERMANENT,
+  rank,
+  scheduleUnmute,
+  targetFor,
+} from './moderation.ts';
 import { config } from './config.ts';
 import { avatarDir, queries, type Channel, type User } from './db.ts';
 import { createJoinToken, roomNameForChannel, webhookReceiver } from './livekit.ts';
@@ -33,7 +45,12 @@ import {
   broadcastPresence,
   kickFromAllRooms,
   presenceSnapshot,
+  dropConnections,
+  isOnline,
+  roomsOf,
   sendMove,
+  sendTo,
+  sendToUsers,
   setActivity,
   subscribe,
 } from './presence.ts';
@@ -105,7 +122,9 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.put('/api/me/activity', { preHandler: requireUser }, async (req) => {
     const body = parse(z.object({ game: z.string().trim().min(1).max(64).nullable() }), req.body);
-    setActivity(req.user.id, body.game);
+    // Launchers and chat apps are not games (older clients could report them as custom games).
+    const notGame = body.game && /^(steam|epic games( launcher)?|battle\.?net|ea( app)?|ubisoft connect|discord|telegram|google chrome|chrome|yandex|opera( gx)?)$/i.test(body.game);
+    setActivity(req.user.id, notGame ? null : body.game);
     return { ok: true };
   });
 
@@ -214,7 +233,8 @@ export async function registerRoutes(app: FastifyInstance) {
 
   // Raw image uploads (avatars, banners). Each route checks the real format and size.
   for (const type of ['image/webp', 'image/gif', 'image/png', 'image/jpeg']) {
-    app.addContentTypeParser(type, { parseAs: 'buffer', bodyLimit: BANNER_MAX }, (_req, body, done) => done(null, body));
+    // Each route checks its own limit (avatar 2 MB, banner 4 MB, chat image 10 MB).
+    app.addContentTypeParser(type, { parseAs: 'buffer', bodyLimit: chat.ATTACH_MAX }, (_req, body, done) => done(null, body));
   }
 
   // Static avatars arrive as a ready square WebP; animated ones as the original GIF or
@@ -329,10 +349,11 @@ export async function registerRoutes(app: FastifyInstance) {
 
   // Move someone to another voice channel. Their client does the switch itself, so it
   // works with any LiveKit setup and they keep their mic pipeline and settings.
-  app.post('/api/channels/:id/move', { preHandler: requireAdmin }, async (req) => {
+  app.post('/api/channels/:id/move', { preHandler: requireStaff }, async (req) => {
     const { id } = parse(idParam, req.params);
     const body = parse(z.object({ userId: z.string() }), req.body);
     getChannel(id);
+    if (body.userId !== req.user.id) targetFor(req.user, body.userId);
     if (!sendMove(body.userId, id, req.user.nickname)) throw new HttpError(409, 'Пользователь сейчас не в сети');
     return { ok: true };
   });
@@ -341,6 +362,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const { id } = parse(idParam, req.params);
     getChannel(id);
     queries.deleteChannel.run(id);
+    await chat.clearConversation(`ch:${id}`);
     await closeChannelRoom(id);
     broadcastChannels();
     return { ok: true };
@@ -368,6 +390,262 @@ export async function registerRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // ---------- everyone: the full member list (online and offline) ----------
+
+  app.get('/api/members', { preHandler: requireUser }, async (req) => {
+    const staff = rank(req.user) > 0;
+    const rows = queries.userProfiles.all() as unknown as (User & { style: string; status: string })[];
+    return {
+      members: rows.map((u) => ({
+        id: u.id,
+        nickname: u.nickname,
+        avatar: u.avatar_version,
+        role: u.is_admin ? 'admin' : u.is_moderator ? 'moderator' : null,
+        online: isOnline(u.id),
+        lastSeenAt: u.last_seen_at,
+        createdAt: u.created_at,
+        muted: isMuted(u),
+        mutedUntil: staff && isMuted(u) ? u.muted_until : null,
+        banned: staff ? isBanned(u) : false,
+        bannedUntil: staff && isBanned(u) ? u.banned_until : null,
+        banReason: staff && isBanned(u) ? u.ban_reason : null,
+        granted: staff ? [...parseGrants(u.cosmetics_granted)] : [],
+      })),
+    };
+  });
+
+  // ---------- moderation (moderators: voice only; admin: everything) ----------
+
+  const notifyAll = () => {
+    broadcastChannels();
+    broadcastPresence();
+  };
+
+  app.post('/api/mod/:id/disconnect', { preHandler: requireStaff }, async (req) => {
+    const target = targetFor(req.user, (req.params as { id: string }).id);
+    sendTo(target.id, 'moderation', { action: 'disconnect', by: req.user.nickname });
+    await kickFromAllRooms(target.id);
+    return { ok: true };
+  });
+
+  app.post('/api/mod/:id/mute', { preHandler: requireStaff }, async (req) => {
+    const target = targetFor(req.user, (req.params as { id: string }).id);
+    const body = parse(z.object({ minutes: z.number().int().positive().nullable() }), req.body);
+    if (!req.user.is_admin && (body.minutes === null || body.minutes > MOD_MAX_MUTE_MIN)) {
+      throw new HttpError(403, 'Модератор может замутить максимум на 24 часа');
+    }
+    const until = body.minutes === null ? PERMANENT : Date.now() + body.minutes * 60_000;
+    queries.setMute.run(until, target.id);
+    scheduleUnmute(target.id, until);
+    await applyVoicePermission(target.id, roomsOf(target.id), false);
+    sendTo(target.id, 'moderation', { action: 'mute', by: req.user.nickname, until });
+    notifyAll();
+    return { ok: true, until };
+  });
+
+  app.post('/api/mod/:id/unmute', { preHandler: requireStaff }, async (req) => {
+    const target = targetFor(req.user, (req.params as { id: string }).id);
+    queries.setMute.run(null, target.id);
+    scheduleUnmute(target.id, null);
+    await applyVoicePermission(target.id, roomsOf(target.id), true);
+    sendTo(target.id, 'moderation', { action: 'unmute', by: req.user.nickname });
+    notifyAll();
+    return { ok: true };
+  });
+
+  app.patch('/api/mod/:id/nickname', { preHandler: requireStaff }, async (req) => {
+    const target = targetFor(req.user, (req.params as { id: string }).id);
+    const body = parse(z.object({ nickname }), req.body);
+    const taken = queries.userByNickname.get(body.nickname) as User | undefined;
+    if (taken && taken.id !== target.id) throw new HttpError(409, 'Такой ник уже занят');
+    queries.renameUser.run(body.nickname, target.id);
+    sendTo(target.id, 'moderation', { action: 'rename', by: req.user.nickname, nickname: body.nickname });
+    notifyAll();
+    return { ok: true };
+  });
+
+  app.post('/api/mod/:id/ban', { preHandler: requireAdmin }, async (req) => {
+    const target = targetFor(req.user, (req.params as { id: string }).id);
+    const body = parse(
+      z.object({ days: z.number().positive().nullable(), reason: z.string().trim().max(200).default('') }),
+      req.body,
+    );
+    const until = body.days === null ? PERMANENT : Date.now() + body.days * 86_400_000;
+    queries.setBan.run(until, body.reason || null, target.id);
+    await kickFromAllRooms(target.id);
+    dropConnections(target.id, banMessage({ banned_until: until, ban_reason: body.reason || null }));
+    notifyAll();
+    return { ok: true, until };
+  });
+
+  app.post('/api/mod/:id/unban', { preHandler: requireAdmin }, async (req) => {
+    const target = targetFor(req.user, (req.params as { id: string }).id);
+    queries.setBan.run(null, null, target.id);
+    notifyAll();
+    return { ok: true };
+  });
+
+  // Admin hands out (or takes back) exclusive cosmetics, like an achievement.
+  app.post('/api/mod/:id/cosmetic', { preHandler: requireAdmin }, async (req) => {
+    const { id } = parse(z.object({ id: z.string() }), req.params);
+    if (!queries.userById.get(id)) throw new HttpError(404, 'Пользователь не найден');
+    const body = parse(z.object({ key: z.enum(GRANTABLE as [string, ...string[]]), on: z.boolean() }), req.body);
+    const granted = setGrant(id, body.key, body.on);
+    notifyAll();
+    return { granted };
+  });
+
+  app.post('/api/mod/:id/role', { preHandler: requireAdmin }, async (req) => {
+    const target = targetFor(req.user, (req.params as { id: string }).id);
+    const body = parse(z.object({ role: z.enum(['moderator', 'member']) }), req.body);
+    queries.setModerator.run(body.role === 'moderator' ? 1 : 0, target.id);
+    sendTo(target.id, 'moderation', { action: 'role', by: req.user.nickname, role: body.role });
+    notifyAll();
+    return { ok: true };
+  });
+
+  // ---------- text chat (channels + private messages) ----------
+
+  const convParam = (req: { params: unknown }) => {
+    const { conv } = parse(z.object({ conv: z.string().min(4).max(120) }), req.params);
+    return conv;
+  };
+  const access = (conv: string, user: User) => {
+    try {
+      chat.checkAccess(conv, user);
+    } catch (e) {
+      throw new HttpError(403, (e as Error).message);
+    }
+  };
+  const deliver = (conv: string, type: 'new' | 'edit' | 'delete', message: chat.Message) =>
+    sendToUsers(chat.audience(conv), 'chat', { type, message });
+  const guard = async <T>(fn: () => Promise<T> | T): Promise<T> => {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e instanceof HttpError) throw e;
+      throw new HttpError(400, (e as Error).message);
+    }
+  };
+
+  app.get('/api/chat/:conv', { preHandler: requireUser }, async (req) => {
+    const conv = convParam(req);
+    access(conv, req.user);
+    const query = parse(
+      z.object({ before: z.coerce.number().int().positive().optional(), limit: z.coerce.number().int().min(1).max(100).default(50) }),
+      req.query,
+    );
+    return { messages: chat.history(conv, query.before ?? null, query.limit) };
+  });
+
+  app.post('/api/chat/:conv', { preHandler: requireUser }, async (req) => {
+    const conv = convParam(req);
+    access(conv, req.user);
+    const body = parse(z.object({ text: z.string(), replyTo: z.number().int().positive().nullable().default(null) }), req.body);
+    const message = await guard(() => chat.post(conv, req.user, body.text, body.replyTo, null));
+    deliver(conv, 'new', message);
+    return { message };
+  });
+
+  // Image as the raw body; text and reply travel in headers (URI-encoded).
+  app.post('/api/chat/:conv/image', { preHandler: requireUser }, async (req) => {
+    const conv = convParam(req);
+    access(conv, req.user);
+    const data = req.body as Buffer;
+    const type = imageType(data);
+    if (!type) throw new HttpError(400, 'Можно отправлять только картинки: PNG, JPEG, WebP, GIF');
+    const h = (name: string) => {
+      const v = req.headers[name];
+      return typeof v === 'string' ? v : '';
+    };
+    const num = (v: string) => (/^\d+$/.test(v) ? Number(v) : null);
+    const message = await guard(() =>
+      chat.post(conv, req.user, decodeURIComponent(h('x-echo-text')), num(h('x-echo-reply')), {
+        data,
+        type,
+        w: num(h('x-echo-w')),
+        h: num(h('x-echo-h')),
+      }),
+    );
+    deliver(conv, 'new', message);
+    return { message };
+  });
+
+  app.patch('/api/chat/message/:id', { preHandler: requireUser }, async (req) => {
+    const { id } = parse(idParam, req.params);
+    const row = chat.getRow(id);
+    if (!row || row.deleted) throw new HttpError(404, 'Сообщение не найдено');
+    if (row.author !== req.user.id) throw new HttpError(403, 'Можно править только свои сообщения');
+    const body = parse(z.object({ text: z.string() }), req.body);
+    const message = await guard(() => chat.edit(id, body.text));
+    deliver(row.conv, 'edit', message);
+    return { message };
+  });
+
+  app.delete('/api/chat/message/:id', { preHandler: requireUser }, async (req) => {
+    const { id } = parse(idParam, req.params);
+    const row = chat.getRow(id);
+    if (!row || row.deleted) throw new HttpError(404, 'Сообщение не найдено');
+    // Own messages anywhere; staff can remove others' messages in channels (not in private chats).
+    const staffInChannel = rank(req.user) > 0 && row.conv.startsWith('ch:');
+    if (row.author !== req.user.id && !staffInChannel) throw new HttpError(403, 'Можно удалять только свои сообщения');
+    const message = await chat.remove(id);
+    deliver(row.conv, 'delete', message);
+    return { message };
+  });
+
+  app.post('/api/chat/:conv/read', { preHandler: requireUser }, async (req) => {
+    const conv = convParam(req);
+    access(conv, req.user);
+    const body = parse(z.object({ id: z.number().int().positive() }), req.body);
+    chat.markRead(req.user.id, conv, body.id);
+    return { ok: true };
+  });
+
+  app.post('/api/chat/:conv/typing', { preHandler: requireUser }, async (req) => {
+    const conv = convParam(req);
+    access(conv, req.user);
+    const to = chat.audience(conv)?.filter((id) => id !== req.user.id) ?? null;
+    sendToUsers(to, 'typing', { conv, userId: req.user.id });
+    return { ok: true };
+  });
+
+  app.get('/api/chat-state', { preHandler: requireUser }, async (req) => ({
+    unread: chat.unread(req.user.id),
+    dms: chat.dmList(req.user.id),
+  }));
+
+  // Keys are 128-bit random: knowing the link is the permission (like avatars, <img> can't send auth).
+  app.get('/api/attachments/:key', async (req, reply) => {
+    const { key } = parse(z.object({ key: z.string().regex(/^[0-9a-f]{32}$/) }), req.params);
+    const info = chat.attachmentInfo(key);
+    if (!info || info.att_gone) throw new HttpError(404, 'Файл удалён');
+    try {
+      const data = await readFile(join(chat.attachDir, key));
+      return reply
+        .header('content-type', info.att_type)
+        .header('cache-control', 'private, max-age=31536000, immutable')
+        .send(data);
+    } catch {
+      throw new HttpError(404, 'Файл удалён');
+    }
+  });
+
+  app.get('/api/chat-storage', { preHandler: requireAdmin }, async () => chat.storageStats());
+
+  app.post('/api/chat-storage/cleanup', { preHandler: requireAdmin }, async (req) => {
+    const body = parse(z.object({ days: z.number().int().min(0).max(3650) }), req.body);
+    return { removed: await chat.cleanupOlderThan(body.days), ...chat.storageStats() };
+  });
+
+  app.delete('/api/chat/:conv', { preHandler: requireAdmin }, async (req) => {
+    const conv = convParam(req);
+    if (!conv.startsWith('ch:')) throw new HttpError(400, 'Чистить можно только каналы');
+    await chat.clearConversation(conv);
+    sendToUsers(null, 'chat', { type: 'cleared', conv });
+    return { ok: true };
+  });
+
   // ---------- admin: users ----------
 
   app.get('/api/users', { preHandler: requireAdmin }, async () => ({
@@ -380,7 +658,7 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.delete('/api/users/:id', { preHandler: requireAdmin }, async (req) => {
     const { id } = parse(z.object({ id: z.string() }), req.params);
-    if (id === req.user.id) throw new HttpError(400, 'Нельзя удалить самого себя');
+    targetFor(req.user, id);
     queries.deleteUser.run(id);
     await rm(avatarPath(id), { force: true });
     await rm(bannerPath(id), { force: true });

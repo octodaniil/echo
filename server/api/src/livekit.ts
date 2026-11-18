@@ -1,6 +1,7 @@
 import { AccessToken, RoomServiceClient, TrackSource, WebhookReceiver, type ParticipantInfo } from 'livekit-server-sdk';
 import { config } from './config.ts';
 import type { User } from './db.ts';
+import { isMuted } from './moderation.ts';
 
 export const roomService = new RoomServiceClient(
   config.livekitInternalUrl,
@@ -26,7 +27,8 @@ export async function createJoinToken(user: User, channelId: number): Promise<st
   token.addGrant({
     room: roomNameForChannel(channelId),
     roomJoin: true,
-    canPublish: true,
+    // A muted user can listen but not speak or stream until the mute ends.
+    canPublish: !isMuted(user),
     canSubscribe: true,
     canPublishData: true,
     // Clients announce whose stream they watch via participant attributes (viewer counts).

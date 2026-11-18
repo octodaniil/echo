@@ -34,6 +34,7 @@ export function channelsSnapshot() {
         banner_version: number | null;
         style: string;
         status: string;
+        muted_until: number | null;
       }[]
     ).map((u) => [u.id, u]),
   );
@@ -57,6 +58,7 @@ export function channelsSnapshot() {
             banner: profile.banner_version,
             style: styles.resolve(m.id, profile.style),
             status: parseStatus(profile.status),
+            muted: !!profile.muted_until && profile.muted_until > Date.now(),
           }
         : m;
     }),
@@ -133,6 +135,7 @@ export function presenceSnapshot() {
     banner_version: number | null;
     style: string;
     status: string;
+    muted_until: number | null;
   }[];
   return rows
     .filter((u) => online.has(u.id))
@@ -148,6 +151,7 @@ export function presenceSnapshot() {
       banner: u.banner_version,
       style: styles.resolve(u.id, u.style),
       status: parseStatus(u.status),
+      muted: !!u.muted_until && u.muted_until > Date.now(),
     }))
     .sort((a, b) => a.nickname.localeCompare(b.nickname, 'ru'));
 }
@@ -312,6 +316,39 @@ export async function handleWebhook(event: WebhookEvent) {
       return;
   }
   broadcastChannels();
+}
+
+/** LiveKit rooms a user is in right now. */
+export function roomsOf(userId: string): string[] {
+  return [...members].filter(([, list]) => list.some((m) => m.id === userId)).map(([id]) => roomNameForChannel(id));
+}
+
+/** Sends an event to everyone (null) or only to the given users. */
+export function sendToUsers(userIds: string[] | null, event: string, data: unknown) {
+  const only = userIds ? new Set(userIds) : null;
+  for (const reply of subscribers) {
+    const id = reply.request.user?.id;
+    if (id && (!only || only.has(id))) send(reply, event, data);
+  }
+}
+
+/** Sends an event to every open connection of one user. */
+export function sendTo(userId: string, event: string, data: unknown) {
+  for (const reply of subscribers) if (reply.request.user?.id === userId) send(reply, event, data);
+}
+
+/** Ends a banned user's live connections (their client then shows the ban screen). */
+export function dropConnections(userId: string, message: string) {
+  for (const reply of subscribers) {
+    if (reply.request.user?.id === userId) {
+      send(reply, 'banned', { message });
+      reply.raw.end();
+    }
+  }
+}
+
+export function isOnline(userId: string) {
+  return onlineIds().has(userId);
 }
 
 export async function kickFromAllRooms(userId: string) {
