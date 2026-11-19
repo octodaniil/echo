@@ -516,3 +516,15 @@
   background: var(--accent);
   font-weight: 700;
 }
+
+/* one-line composer: no stray scrollbar; long lines wrap into the auto-growing rows */
+.chat-compose textarea {
+  min-height: 38px;
+  line-height: 20px;
+  scrollbar-width: thin;
+}
+.chat-compose textarea::placeholder {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

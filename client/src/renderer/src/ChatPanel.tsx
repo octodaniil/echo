@@ -127,6 +127,16 @@ export function ChatPanel({
     if (stick.current && list?.length) store.markRead(conv);
   }, [list?.length, store.version]);
 
+  // The composer grows with its content (wrapped long lines too) up to 6 lines, then scrolls.
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const max = 6 * 20 + 18;
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+    el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden';
+  }, [text]);
+
   const onScroll = () => {
     const el = scroller.current!;
     stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
@@ -518,9 +528,10 @@ export function ChatPanel({
           <textarea
             ref={input}
             value={text}
-            rows={Math.min(6, Math.max(1, text.split('\n').length))}
+            rows={1}
             maxLength={2000}
-            placeholder="Сообщение… (@ — упомянуть, ↑ — изменить последнее)"
+            placeholder="Сообщение…"
+            title="Enter — отправить · Shift+Enter — новая строка · @ — упомянуть · ↑ — изменить последнее"
             onInput={onInput}
             onClick={(e) => updateMention(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
             onBlur={() => window.setTimeout(() => setMention(null), 150)}
