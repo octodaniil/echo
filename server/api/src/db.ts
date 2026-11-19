@@ -23,6 +23,8 @@ export interface User {
   muted_until: number | null;
   /** Exclusive cosmetics the admin handed out (JSON array of "slot:id"). */
   cosmetics_granted: string | null;
+  /** Access to the friends-only "Первооткрыватели" achievements and styles. */
+  is_pioneer: number;
 }
 
 export interface Invite {
@@ -100,6 +102,7 @@ addColumn('banned_until', 'banned_until INTEGER');
 addColumn('ban_reason', 'ban_reason TEXT');
 addColumn('muted_until', 'muted_until INTEGER');
 addColumn('cosmetics_granted', 'cosmetics_granted TEXT');
+addColumn('is_pioneer', 'is_pioneer INTEGER NOT NULL DEFAULT 0');
 addColumn('style', "style TEXT NOT NULL DEFAULT '{}'");
 addColumn('status', "status TEXT NOT NULL DEFAULT '{}'");
 
@@ -128,13 +131,13 @@ export function transaction<T>(fn: () => T): T {
 
 export const queries = {
   userByTokenHash: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type, banned_until, ban_reason, muted_until, cosmetics_granted FROM users WHERE token_hash = ?',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type, banned_until, ban_reason, muted_until, cosmetics_granted, is_pioneer FROM users WHERE token_hash = ?',
   ),
   userByNickname: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type, banned_until, ban_reason, muted_until, cosmetics_granted FROM users WHERE nickname = ? COLLATE NOCASE',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type, banned_until, ban_reason, muted_until, cosmetics_granted, is_pioneer FROM users WHERE nickname = ? COLLATE NOCASE',
   ),
   listUsers: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type, banned_until, ban_reason, muted_until, cosmetics_granted FROM users ORDER BY created_at',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type, banned_until, ban_reason, muted_until, cosmetics_granted, is_pioneer FROM users ORDER BY created_at',
   ),
   insertUser: db.prepare(
     'INSERT INTO users (id, nickname, is_admin, token_hash, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -149,16 +152,17 @@ export const queries = {
   setBan: db.prepare('UPDATE users SET banned_until = ?, ban_reason = ? WHERE id = ?'),
   setMute: db.prepare('UPDATE users SET muted_until = ? WHERE id = ?'),
   setGrants: db.prepare('UPDATE users SET cosmetics_granted = ? WHERE id = ?'),
+  setPioneer: db.prepare('UPDATE users SET is_pioneer = ? WHERE id = ?'),
   mutedUsers: db.prepare('SELECT id, muted_until FROM users WHERE muted_until IS NOT NULL'),
   setStyle: db.prepare('UPDATE users SET style = ? WHERE id = ?'),
   setStatus: db.prepare('UPDATE users SET status = ? WHERE id = ?'),
   styleStatus: db.prepare('SELECT style, status FROM users WHERE id = ?'),
   setBanner: db.prepare('UPDATE users SET banner_version = ?, banner_type = ? WHERE id = ?'),
   userProfiles: db.prepare(
-    'SELECT id, nickname, avatar_version, pinned, is_admin, is_moderator, banner_version, style, status, muted_until, banned_until, ban_reason, last_seen_at, created_at, cosmetics_granted FROM users',
+    'SELECT id, nickname, avatar_version, pinned, is_admin, is_moderator, banner_version, style, status, muted_until, banned_until, ban_reason, last_seen_at, created_at, cosmetics_granted, is_pioneer FROM users',
   ),
   userById: db.prepare(
-    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type, banned_until, ban_reason, muted_until, cosmetics_granted FROM users WHERE id = ?',
+    'SELECT id, nickname, is_admin, created_at, last_seen_at, avatar_version, pinned, is_moderator, banner_version, banner_type, banned_until, ban_reason, muted_until, cosmetics_granted, is_pioneer FROM users WHERE id = ?',
   ),
 
   inviteByCode: db.prepare('SELECT * FROM invites WHERE code = ?'),

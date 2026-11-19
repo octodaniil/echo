@@ -15,11 +15,11 @@ export interface Unlock {
   /** Hold any one-of-a-kind achievement. */
   unique?: boolean;
   /** Only for the admin, or for staff (admin + moderators). The admin can also grant it. */
-  role?: 'admin' | 'staff';
+  role?: 'admin' | 'staff' | 'pioneer';
 }
 
 /** Where an item shows up in the Style tab. */
-export type Group = 'basic' | 'level' | 'achievement' | 'exclusive';
+export type Group = 'basic' | 'level' | 'achievement' | 'pioneer' | 'exclusive';
 
 export interface Cosmetic {
   id: string;
@@ -71,6 +71,9 @@ export const COSMETICS: Cosmetic[] = [
   item('frame', 'legend', 'Голос легенды', 'achievement', { achievement: 'voice_100h' }),
   item('frame', 'five', 'Пятёрка', 'achievement', { achievement: 'squad_5' }),
   item('frame', 'prism', 'Призма', 'achievement', { unique: true }),
+  item('frame', 'pioneer', 'Первопроходец', 'pioneer', { role: 'pioneer' }),
+  item('frame', 'circle', 'Круг основателей', 'pioneer', { achievement: 'p_first_call' }),
+  item('frame', 'bughunter', 'Прицел охотника', 'pioneer', { achievement: 'p_bug_hunter' }),
   item('frame', 'architect', 'Архитектор', 'exclusive', { role: 'admin' }),
   item('frame', 'guardian', 'Страж', 'exclusive', { role: 'staff' }),
 
@@ -84,6 +87,8 @@ export const COSMETICS: Cosmetic[] = [
   item('plate', 'stars', 'Ночное небо', 'achievement', { achievement: 'new_year' }),
   item('plate', 'flame', 'Пламя', 'achievement', { achievement: 'streak_30' }),
   item('plate', 'air', 'Эфир', 'achievement', { achievement: 'stream_50' }),
+  item('plate', 'topo', 'Карта первопроходца', 'pioneer', { role: 'pioneer' }),
+  item('plate', 'campfire', 'Костёр', 'pioneer', { achievement: 'p_night_legend' }),
   item('plate', 'goldcode', 'Золотой код', 'exclusive', { role: 'admin' }),
   item('plate', 'shield', 'Щит', 'exclusive', { role: 'staff' }),
 
@@ -95,6 +100,8 @@ export const COSMETICS: Cosmetic[] = [
   item('name', 'glitch', 'Глитч', 'level', { level: 13 }),
   item('name', 'chrome', 'Хром', 'level', { level: 17 }),
   item('name', 'holo', 'Голограмма', 'achievement', { unique: true }),
+  item('name', 'pioneer', 'Первопроходец', 'pioneer', { role: 'pioneer' }),
+  item('name', 'sunset', 'Закат', 'pioneer', { achievement: 'p_party' }),
   item('name', 'crown', 'Корона', 'exclusive', { role: 'admin' }),
   item('name', 'guard', 'Страж', 'exclusive', { role: 'staff' }),
 ];
@@ -113,8 +120,11 @@ export const DEFAULT_STYLE: Style = { ring: 'accent', frame: 'none', name: 'none
 
 const find = (slot: Slot, id: string) => COSMETICS.find((c) => c.slot === slot && c.id === id);
 
-export function isUnlocked(c: Cosmetic, prestige: Prestige, owned: Set<string>, hasUnique: boolean, role: 0 | 1 | 2 = 0): boolean {
+export function isUnlocked(c: Cosmetic, prestige: Prestige, owned: Set<string>, hasUnique: boolean, role: 0 | 1 | 2 = 0, pioneer = false): boolean {
   const u = c.unlock;
+  // Friends-only items need access in any case (staff always have it).
+  if (c.group === 'pioneer' && !pioneer && role < 1) return false;
+  if (u.role === 'pioneer' && !pioneer && role < 1) return false;
   if (u.role === 'admin' && role < 2) return false;
   if (u.role === 'staff' && role < 1) return false;
   if (u.level && prestige.level < u.level) return false;
@@ -161,10 +171,11 @@ export function styleContext() {
   const users = queries.listUsers.all() as unknown as User[];
   const roles = new Map(users.map((u) => [u.id, (u.is_admin ? 2 : u.is_moderator ? 1 : 0) as 0 | 1 | 2]));
   const grants = new Map(users.map((u) => [u.id, parseGrants(u.cosmetics_granted)]));
+  const pioneers = new Set(users.filter((u) => u.is_pioneer).map((u) => u.id));
   const open = (userId: string, x: Cosmetic, p: Prestige, have: Set<string>, hasUnique: boolean) =>
     roles.get(userId) === 2 ||
     !!grants.get(userId)?.has(`${x.slot}:${x.id}`) ||
-    isUnlocked(x, p, have, hasUnique, roles.get(userId) ?? 0);
+    isUnlocked(x, p, have, hasUnique, roles.get(userId) ?? 0, pioneers.has(userId));
   return {
     /** Equipped style, with anything no longer unlocked falling back to the default. */
     resolve(userId: string, json: string | null | undefined): Style {
@@ -185,7 +196,12 @@ export function styleContext() {
       const p = prestige.get(userId) ?? prestigeFromPoints(0);
       const have = owned.get(userId) ?? new Set<string>();
       const hasUnique = [...have].some((code) => UNIQUE_CODES.has(code));
-      return COSMETICS.map((c) => ({ ...c, unlocked: open(userId, c, p, have, hasUnique) }));
+      // Friends-only items are not even listed for people without access.
+      const access = pioneers.has(userId) || (roles.get(userId) ?? 0) > 0;
+      return COSMETICS.filter((x) => access || x.group !== 'pioneer').map((x) => ({
+        ...x,
+        unlocked: open(userId, x, p, have, hasUnique),
+      }));
     },
   };
 }

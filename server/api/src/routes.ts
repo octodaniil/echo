@@ -86,6 +86,9 @@ function imageType(data: unknown): string | null {
   return null;
 }
 
+/** Admin and moderators always see the friends-only section; others need access. */
+const pioneerAccess = (u: User) => !!(u.is_admin || u.is_moderator || u.is_pioneer);
+
 function getChannel(id: number): Channel {
   const channel = queries.channelById.get(id) as Channel | undefined;
   if (!channel) throw new HttpError(404, 'Канал не найден');
@@ -131,8 +134,8 @@ export async function registerRoutes(app: FastifyInstance) {
   // ---------- profiles & achievements ----------
 
   app.get('/api/achievements', { preHandler: requireUser }, async (req) => ({
-    catalog: catalogFor(new Set(listAchievements(req.user.id).map((a) => a.code))),
-    categories: CATEGORIES,
+    catalog: catalogFor(new Set(listAchievements(req.user.id).map((a) => a.code)), pioneerAccess(req.user)),
+    categories: CATEGORIES.filter((c) => c.id !== 'pioneers' || pioneerAccess(req.user)),
   }));
 
   app.get('/api/users/:id/profile', { preHandler: requireUser }, async (req) => {
@@ -145,7 +148,8 @@ export async function registerRoutes(app: FastifyInstance) {
         createdAt: user.created_at,
         lastSeenAt: user.last_seen_at,
         ...getStats(id),
-        achievements: listAchievements(id),
+        // Friends-only achievements stay invisible to viewers without access.
+        achievements: listAchievements(id).filter((a) => pioneerAccess(req.user) || !definition(a.code)?.pioneer),
         // Hidden achievements this person has earned are shown in full on their profile.
         revealed: listAchievements(id)
           .map((a) => definition(a.code))
@@ -208,10 +212,20 @@ export async function registerRoutes(app: FastifyInstance) {
     return { pinned };
   });
 
-  app.post('/api/users/:id/achievements', { preHandler: requireAdmin }, async (req) => {
+  /** Admin: anyone. Moderator: anyone except themselves and the admin. */
+  const canAward = (actor: User, targetId: string) => {
+    const target = queries.userById.get(targetId) as User | undefined;
+    if (!target) throw new HttpError(404, 'Пользователь не найден');
+    if (actor.is_admin) return target;
+    if (target.id === actor.id) throw new HttpError(403, 'Себе ачивки выдавать нельзя');
+    if (target.is_admin) throw new HttpError(403, 'Админу ачивки выдаёт только админ');
+    return target;
+  };
+
+  app.post('/api/users/:id/achievements', { preHandler: requireStaff }, async (req) => {
     const { id } = parse(z.object({ id: z.string() }), req.params);
     const body = parse(z.object({ code: z.string() }), req.body);
-    if (!queries.userById.get(id)) throw new HttpError(404, 'Пользователь не найден');
+    canAward(req.user, id);
     if (!isAchievement(body.code)) throw new HttpError(400, 'Нет такой ачивки');
     const holder = definition(body.code)?.unique ? holderOf(body.code) : null;
     if (holder && holder !== id) {
@@ -222,8 +236,9 @@ export async function registerRoutes(app: FastifyInstance) {
     return { achievements: listAchievements(id) };
   });
 
-  app.delete('/api/users/:id/achievements/:code', { preHandler: requireAdmin }, async (req) => {
+  app.delete('/api/users/:id/achievements/:code', { preHandler: requireStaff }, async (req) => {
     const { id, code } = parse(z.object({ id: z.string(), code: z.string() }), req.params);
+    canAward(req.user, id);
     revoke(id, code);
     broadcastChannels();
     return { achievements: listAchievements(id) };
@@ -410,6 +425,7 @@ export async function registerRoutes(app: FastifyInstance) {
         bannedUntil: staff && isBanned(u) ? u.banned_until : null,
         banReason: staff && isBanned(u) ? u.ban_reason : null,
         granted: staff ? [...parseGrants(u.cosmetics_granted)] : [],
+        pioneer: staff ? !!u.is_pioneer : false,
       })),
     };
   });
@@ -493,6 +509,18 @@ export async function registerRoutes(app: FastifyInstance) {
     const granted = setGrant(id, body.key, body.on);
     notifyAll();
     return { granted };
+  });
+
+  // Admin opens (or closes) the friends-only "Первооткрыватели" tab and styles for someone.
+  app.post('/api/mod/:id/pioneer', { preHandler: requireAdmin }, async (req) => {
+    const { id } = parse(z.object({ id: z.string() }), req.params);
+    if (!queries.userById.get(id)) throw new HttpError(404, 'Пользователь не найден');
+    const body = parse(z.object({ on: z.boolean() }), req.body);
+    queries.setPioneer.run(body.on ? 1 : 0, id);
+    if (body.on) award(id, 'p_hello');
+    sendTo(id, 'moderation', { action: 'pioneer', by: req.user.nickname, on: body.on });
+    notifyAll();
+    return { ok: true };
   });
 
   app.post('/api/mod/:id/role', { preHandler: requireAdmin }, async (req) => {

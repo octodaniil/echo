@@ -1,7 +1,7 @@
 import { db, queries, type User } from './db.ts';
 
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'unique';
-export type Category = 'special' | 'voice' | 'games' | 'stream' | 'social' | 'secret';
+export type Category = 'special' | 'voice' | 'games' | 'stream' | 'social' | 'secret' | 'pioneers';
 
 export interface AchievementDef {
   code: string;
@@ -17,6 +17,8 @@ export interface AchievementDef {
   hidden?: boolean;
   /** One of a kind: only a single person can ever hold it. */
   unique?: boolean;
+  /** Friends-only ("Первооткрыватели"): invisible to people without access. */
+  pioneer?: boolean;
 }
 
 export const CATEGORIES: { id: Category; title: string }[] = [
@@ -26,6 +28,7 @@ export const CATEGORIES: { id: Category; title: string }[] = [
   { id: 'stream', title: 'Трансляции' },
   { id: 'social', title: 'Компания' },
   { id: 'secret', title: 'Секреты' },
+  { id: 'pioneers', title: 'Первооткрыватели' },
 ];
 
 const U = 'Такая ачивка может быть только у одного человека';
@@ -92,11 +95,65 @@ export const CATALOG: AchievementDef[] = [
   { code: 'friday13', title: 'Пятница, 13', description: 'Был в голосе в пятницу 13-го', rarity: 'epic', category: 'secret', icon: 'cat', hidden: true },
   { code: 'new_year', title: 'С Новым годом!', description: 'Встретил Новый год в голосовом канале', rarity: 'legendary', category: 'secret', icon: 'sparkle', hidden: true },
   { code: 'comeback', title: 'Блудный сын', description: 'Вернулся в голос после 30 дней отсутствия', rarity: 'rare', category: 'secret', icon: 'door', hidden: true },
+
+  // ---------- pioneers: friends and first users (given by the admin / moderators) ----------
+  ...pioneers([
+    // one of a kind
+    ['p_first_friend', 'Первый друг', 'Первым из друзей пришёл в Echo', 'unique', 'handshake'],
+    ['p_bug_hunter_1', 'Охотник №1', 'Нашёл больше всех багов, пока Echo был совсем сырым', 'unique', 'bug'],
+    ['p_voice_of_echo', 'Голос Echo', 'Первый голос, прозвучавший в Echo после основателя', 'unique', 'mic'],
+    ['p_right_hand', 'Правая рука', 'Помогал строить Echo с самого начала', 'unique', 'shield'],
+    // legendary
+    ['p_first_call', 'Первый созвон', 'Был на самом первом созвоне в Echo', 'legendary', 'broadcast'],
+    ['p_muse', 'Муза', 'Подкинул идею, которая стала частью Echo', 'legendary', 'sparkle'],
+    ['p_beta_veteran', 'Ветеран беты', 'Пережил все сырые версии и не ушёл', 'legendary', 'medal'],
+    ['p_night_legend', 'Легенда ночи', 'Тот самый ночной созвон, который все запомнили', 'legendary', 'moon'],
+    ['p_clutch', 'Клатч века', 'Затащил так, что это обсуждали неделю', 'legendary', 'trophy'],
+    ['p_heart', 'Сердце компании', 'Без него созвоны уже не те', 'legendary', 'heart'],
+    // epic
+    ['p_bug_hunter', 'Охотник за багами', 'Нашёл баг и рассказал о нём', 'epic', 'bug'],
+    ['p_crash_test', 'Краш-тестер', 'Сломал Echo так, как никто не ожидал', 'epic', 'flask'],
+    ['p_stream_zero', 'Нулевой эфир', 'Стримил, когда трансляции ещё глючили', 'epic', 'tv'],
+    ['p_party', 'Тусовщик', 'Собрал полный канал друзей', 'epic', 'people'],
+    ['p_dj', 'Диджей', 'Включил музыку на весь канал — и никто не ушёл', 'epic', 'music'],
+    ['p_meme_lord', 'Мем-лорд', 'Шутка, которую повторяют до сих пор', 'epic', 'star'],
+    ['p_mentor', 'Наставник', 'Научил кого-то из друзей играть', 'epic', 'compass'],
+    ['p_peacemaker', 'Миротворец', 'Помирил всех после проигранной катки', 'epic', 'handshake'],
+    // rare
+    ['p_invite', 'Позвал друга', 'Привёл нового человека в Echo', 'rare', 'door'],
+    ['p_late', 'Опоздун', 'Опоздал на собранный созвон на целый час', 'rare', 'timer'],
+    ['p_afk', 'Ушёл за чаем', 'Весь созвон был AFK, но формально присутствовал', 'rare', 'coffee'],
+    ['p_echo_echo', 'Эхо-эхо', 'Забыл про колонки — и все услышали себя', 'rare', 'echo'],
+    ['p_muted_talk', 'Говорю в пустоту', 'Долго рассказывал что-то с выключенным микрофоном', 'rare', 'micoff'],
+    ['p_loudest', 'Громкость 200%', 'Самый громкий крик в истории канала', 'rare', 'wave'],
+    ['p_first_word', 'Первое слово', 'Написал одно из первых сообщений в чате Echo', 'rare', 'chat'],
+    // common
+    ['p_hello', 'Привет, Echo', 'Один из первооткрывателей Echo', 'common', 'flag'],
+    ['p_feedback', 'Отзыв', 'Рассказал, что думает о новой версии', 'common', 'chat'],
+    ['p_screenshot', 'Скриншотер', 'Прислал скриншот с багом', 'common', 'stack'],
+    ['p_tester', 'Тестировщик', 'Первым попробовал новую фичу', 'common', 'joystick'],
+    ['p_birthday', 'С днём рождения!', 'Поздравили всем каналом', 'common', 'cake'],
+  ]),
 ];
 
-/** What clients see: hidden achievements are masked unless the viewer has earned them. */
-export function catalogFor(ownedCodes: Set<string>) {
-  return CATALOG.map((a) => {
+function pioneers(rows: [string, string, string, Rarity, string][]): AchievementDef[] {
+  return rows.map(([code, title, description, rarity, icon]) => ({
+    code,
+    title,
+    description,
+    rarity,
+    category: 'pioneers' as const,
+    icon,
+    manual: true,
+    pioneer: true,
+    ...(rarity === 'unique' ? { unique: true, description: `${description}. Такая ачивка может быть только у одного человека` } : {}),
+  }));
+}
+
+/** What clients see: hidden achievements are masked unless the viewer has earned them;
+ *  friends-only ones are left out entirely for people without access. */
+export function catalogFor(ownedCodes: Set<string>, pioneerAccess = false) {
+  return CATALOG.filter((a) => pioneerAccess || !a.pioneer).map((a) => {
     if (a.hidden && !ownedCodes.has(a.code)) {
       return { code: a.code, title: 'Скрытая ачивка', description: 'Получишь — узнаешь', rarity: a.rarity, category: a.category, icon: 'question', hidden: true };
     }
