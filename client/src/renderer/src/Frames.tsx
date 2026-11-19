@@ -254,6 +254,57 @@ const FRAMES: Record<string, () => JSX.Element> = {
       <C r="78" stroke="url(#fHolo)" stroke-width="1" stroke-dasharray="2 4" />
     </>
   ),
+  pioneer: () => (
+    <>
+      <C r="62" stroke="#5fe3b0" stroke-width="2.5" />
+      <C r="74" stroke="rgba(95,227,176,.35)" stroke-width="1" stroke-dasharray="1 5" />
+      <g class="fx-spin fx-slow">
+        <C r="84" stroke="rgba(255,214,120,.5)" stroke-width="1" pathLength="100" stroke-dasharray="18 7" />
+      </g>
+      <g stroke="#5fe3b0" stroke-width="2">
+        <path d="M100 24v12M176 100h-12M100 176v-12M24 100h12" />
+      </g>
+      <g fill="#ffd678">
+        <path d="M100 8 L106 24 L100 20 L94 24 Z" />
+      </g>
+      <text x="100" y="47" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" font-weight="700" fill="#ffd678">N</text>
+      <g fill="none" stroke="#ffd678" stroke-width="1.2">
+        <path d="M150 34 v-14 h12 l-3 4 3 4 h-12" />
+      </g>
+    </>
+  ),
+  circle: () => (
+    <>
+      <g class="fx-spin fx-slow" fill="none">
+        <C r="64" stroke="#7fe0ff" stroke-width="2" />
+        <circle cx="100" cy="100" r="70" stroke="#ffb3d9" stroke-width="2" transform="translate(4 -3)" opacity=".85" />
+      </g>
+      <g fill="#fff">
+        <circle cx="100" cy="24" r="2.5" class="fx-twinkle" />
+        <circle cx="166" cy="70" r="2" class="fx-twinkle" style={{ animationDelay: '-.8s' }} />
+        <circle cx="150" cy="160" r="2.5" class="fx-twinkle" style={{ animationDelay: '-1.4s' }} />
+        <circle cx="44" cy="156" r="2" class="fx-twinkle" style={{ animationDelay: '-.3s' }} />
+        <circle cx="32" cy="74" r="2.5" class="fx-twinkle" style={{ animationDelay: '-2s' }} />
+      </g>
+      <C r="82" stroke="rgba(255,179,217,.3)" stroke-width="1" stroke-dasharray="3 6" />
+    </>
+  ),
+  bughunter: () => (
+    <>
+      <C r="62" stroke="#9cff57" stroke-width="2" />
+      <g class="fx-spin">
+        <C r="76" stroke="#9cff57" stroke-width="1.5" pathLength="100" stroke-dasharray="20 5" opacity=".6" />
+      </g>
+      <g stroke="#9cff57" stroke-width="2.5">
+        <path d="M100 14v22M100 164v22M14 100h22M164 100h22" />
+      </g>
+      <g transform="translate(162 38)" fill="#9cff57">
+        <ellipse cx="0" cy="0" rx="5" ry="7" />
+        <path d="M-5 -3 l-5 -3 M5 -3 l5 -3 M-5 2 l-6 1 M5 2 l6 1 M-4 6 l-4 4 M4 6 l4 4" stroke="#9cff57" stroke-width="1.5" />
+      </g>
+      <circle cx="162" cy="38" r="12" fill="none" stroke="#ff4d6d" stroke-width="1.5" class="fx-pulse" />
+    </>
+  ),
   architect: () => (
     <>
       <C r="96" stroke="url(#fGold)" stroke-width="10" opacity=".25" filter="url(#fGlow2)" />
@@ -333,6 +384,9 @@ export const FRAME_COLOR: Record<string, string> = {
   legend: '#39ff9c',
   five: '#ffc24a',
   prism: '#ffe08a',
+  pioneer: '#5fe3b0',
+  circle: '#ffb3d9',
+  bughunter: '#9cff57',
   architect: '#ffc24a',
   guardian: '#5ab4ff',
 };

@@ -24,6 +24,7 @@ export function ProfileView({
   userId,
   meId,
   amAdmin,
+  amModerator = false,
   activity,
   onClose,
   onMessage,
@@ -31,6 +32,8 @@ export function ProfileView({
   userId: string;
   meId: string;
   amAdmin: boolean;
+  /** Moderators can award / revoke too, except for themselves and the admin. */
+  amModerator?: boolean;
   /** What they're playing right now (from presence). */
   activity: Activity | null;
   onClose: () => void;
@@ -262,7 +265,7 @@ export function ProfileView({
               <div class="profile-section-head">
                 <h3>Ачивки</h3>
                 {isMe && <small class="muted">Нажми на полученную, чтобы закрепить в профиле (до {MAX_PINNED})</small>}
-                {amAdmin && (
+                {(amAdmin || (amModerator && !isMe && !profile.isAdmin)) && (
                   <button class={`secondary small${manage ? ' active' : ''}`} onClick={() => setManage(!manage)}>
                     {manage ? 'Готово' : 'Выдать / забрать'}
                   </button>
@@ -273,7 +276,7 @@ export function ProfileView({
                   <button
                     key={g.id}
                     role="tab"
-                    class={`ach-tab${current?.id === g.id ? ' active' : ''}${g.id === 'special' ? ' special' : ''}`}
+                    class={`ach-tab${current?.id === g.id ? ' active' : ''}${g.id === 'special' ? ' special' : ''}${g.id === 'pioneers' ? ' pioneers' : ''}`}
                     onClick={() => setTab(g.id)}
                   >
                     {g.title}

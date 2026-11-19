@@ -1470,3 +1470,17 @@ input[type='range']::-webkit-slider-thumb {
   letter-spacing: 0.12em;
   color: var(--muted);
 }
+
+/* status menu lives outside the (clipped) user card, just above it */
+.sidebar {
+  position: relative;
+}
+.sidebar > .status-menu {
+  left: 12px;
+  bottom: 82px;
+}
+.mic-recovery {
+  margin-top: 6px;
+  color: var(--warn);
+  letter-spacing: 0.04em;
+}

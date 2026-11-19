@@ -1,9 +1,9 @@
 {
   "name": "echo-client",
   "productName": "Echo",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
-  "description": "Echo — голосовой чат для своих",
+  "description": "Echo вЂ” РіРѕР»РѕСЃРѕРІРѕР№ С‡Р°С‚ РґР»СЏ СЃРІРѕРёС…",
   "author": "octodaniil",
   "homepage": "https://github.com/octodaniil/echo",
   "main": "./out/main/index.js",

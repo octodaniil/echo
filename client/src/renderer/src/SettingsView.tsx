@@ -216,7 +216,14 @@ function VoiceTab() {
       {micError ? (
         <div class="error">Микрофон недоступен: {micError}</div>
       ) : (
-        <LevelMeter pipeline={pipeline} manual={!s.sensitivityAuto} threshold={s.sensitivityDb} />
+        <>
+          <LevelMeter pipeline={pipeline} manual={!s.sensitivityAuto} threshold={s.sensitivityDb} />
+          {pipeline && pipeline.log.length > 0 && (
+            <div class="mic-recovery mono tiny" title={pipeline.log.join('\n')}>
+              Echo сам переподключал микрофон {pipeline.log.length} раз · последний: {pipeline.log.at(-1)}
+            </div>
+          )}
+        </>
       )}
       <div class="meter-actions">
         <button class={`secondary${testing ? ' active' : ''}`} onClick={() => setTesting(!testing)} disabled={!pipeline}>

@@ -20,6 +20,18 @@ export class MicPipeline {
   private readonly gate = this.ctx.createGain();
   private readonly analyser = this.ctx.createAnalyser();
   private readonly samples = new Float32Array(512);
+  /** Raw microphone signal (before RNNoise / gain): to notice a mic that went dead. */
+  private readonly rawAnalyser = this.ctx.createAnalyser();
+  private readonly rawSamples = new Float32Array(512);
+  /** Since when the raw input has been exact digital silence (a real mic never is). */
+  private deadSince = 0;
+  private lastRecovery = 0;
+  /** Recoveries in a row that didn't bring sound back (e.g. the mic is muted in hardware). */
+  private failedRecoveries = 0;
+  private recovering = false;
+  private destroyed = false;
+  /** Recent recoveries, for diagnostics (window.__echo.voice / settings). */
+  readonly log: string[] = [];
   /** Input levels of the last 3 s (one per 20 ms tick), for the noise floor. */
   private readonly recent = new Float32Array(150).fill(-60);
   private recentPos = 0;
@@ -52,6 +64,12 @@ export class MicPipeline {
     }
     this.inputGain.channelInterpretation = 'discrete';
     this.analyser.fftSize = 512;
+    this.rawAnalyser.fftSize = 512;
+    // Windows can suspend the audio context (sleep, device switch): wake it up again.
+    this.ctx.onstatechange = () => {
+      if (!this.destroyed && this.ctx.state !== 'running' && this.ctx.state !== 'closed') void this.ctx.resume().catch(() => {});
+    };
+    navigator.mediaDevices.addEventListener('devicechange', this.onDeviceChange);
     this.gate.gain.value = 0;
     this.inputGain.connect(this.analyser);
     this.inputGain.connect(this.gate);
@@ -119,8 +137,67 @@ export class MicPipeline {
       });
       this.stream?.getTracks().forEach((t) => t.stop());
       this.stream = stream;
+      const track = stream.getAudioTracks()[0];
+      // The device disappeared or Windows took it away: get a new one right away.
+      track?.addEventListener('ended', () => {
+        if (this.stream === stream) void this.recover('устройство отключилось');
+      });
     }
     if (needRewire) await this.rewire(s);
+  }
+
+  private onDeviceChange = () => {
+    // A headset plugged in / out or the default device changed: if our track died, recover.
+    window.setTimeout(() => {
+      const track = this.stream?.getAudioTracks()[0];
+      if (!track || track.readyState === 'ended' || this.deadSince) void this.recover('сменилось устройство');
+    }, 800);
+  };
+
+  /**
+   * Re-opens the microphone with the current settings. The published track never changes
+   * (it comes from our graph), so friends just hear you again — no rejoin needed.
+   */
+  async recover(reason: string) {
+    if (this.recovering || this.destroyed || !this.applied) return;
+    // Back off when re-opening doesn't help (hardware mute switch, mic unplugged for good).
+    const wait = this.failedRecoveries >= 3 ? 60_000 : 8000;
+    if (Date.now() - this.lastRecovery < wait) return;
+    if (this.deadSince && this.lastRecovery) this.failedRecoveries++;
+    this.recovering = true;
+    this.lastRecovery = Date.now();
+    const line = `${new Date().toLocaleTimeString('ru-RU')} микрофон переподключён: ${reason}`;
+    this.log.push(line);
+    if (this.log.length > 20) this.log.shift();
+    console.warn('[mic]', line);
+    try {
+      if (this.ctx.state !== 'running') await this.ctx.resume().catch(() => {});
+      const s = this.applied;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: s.inputDeviceId === 'default' ? undefined : { ideal: s.inputDeviceId },
+          echoCancellation: s.echoCancellation,
+          noiseSuppression: usesBrowserNs(s.noiseSuppression),
+          autoGainControl: s.autoGain,
+          channelCount: 1,
+          sampleRate: 48_000,
+        },
+      });
+      this.stream?.getTracks().forEach((t) => t.stop());
+      this.stream = stream;
+      stream.getAudioTracks()[0]?.addEventListener('ended', () => {
+        if (this.stream === stream) void this.recover('устройство отключилось');
+      });
+      await this.rewire(s);
+      this.deadSince = 0;
+      // Fresh device, fresh noise estimate.
+      this.recent.fill(-60);
+      this.noiseFloor = -60;
+    } catch (err) {
+      console.warn('[mic] recover failed', err);
+    } finally {
+      this.recovering = false;
+    }
   }
 
   private async rewire(s: Settings) {
@@ -130,6 +207,7 @@ export class MicPipeline {
     this.rnnoise = null;
 
     this.source = this.ctx.createMediaStreamSource(this.stream!);
+    this.source.connect(this.rawAnalyser);
     if (usesRnnoise(s.noiseSuppression)) {
       this.rnnoise = await createRnnoise(this.ctx);
       this.source.connect(this.rnnoise).connect(this.inputGain);
@@ -141,6 +219,21 @@ export class MicPipeline {
   private tick() {
     const s = this.applied;
     if (!s) return;
+
+    // Watchdog: exact zeros from the device for 4 s = the mic stopped delivering sound
+    // (sleep, USB power saving, another app took it). Real microphones always hiss a bit.
+    this.rawAnalyser.getFloatTimeDomainData(this.rawSamples);
+    let peak = 0;
+    for (const v of this.rawSamples) peak = Math.max(peak, Math.abs(v));
+    const track = this.stream?.getAudioTracks()[0];
+    if (peak === 0 && track?.enabled) {
+      this.deadSince ||= performance.now();
+      if (performance.now() - this.deadSince > 4000) void this.recover('пропал звук с микрофона');
+    } else {
+      this.deadSince = 0;
+      this.failedRecoveries = 0;
+    }
+    if (track?.readyState === 'ended') void this.recover('устройство отключилось');
 
     this.analyser.getFloatTimeDomainData(this.samples);
     let sum = 0;
@@ -190,6 +283,8 @@ export class MicPipeline {
   }
 
   async destroy() {
+    this.destroyed = true;
+    navigator.mediaDevices.removeEventListener('devicechange', this.onDeviceChange);
     clearInterval(this.timer);
     this.stream?.getTracks().forEach((t) => t.stop());
     this.rnnoise?.destroy();

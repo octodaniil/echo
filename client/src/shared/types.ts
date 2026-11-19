@@ -55,8 +55,8 @@ export interface Cosmetic {
   id: string;
   slot: CosmeticSlot;
   title: string;
-  group: 'basic' | 'level' | 'achievement' | 'exclusive';
-  unlock: { level?: number; achievement?: string; unique?: boolean; role?: 'admin' | 'staff' };
+  group: 'basic' | 'level' | 'achievement' | 'pioneer' | 'exclusive';
+  unlock: { level?: number; achievement?: string; unique?: boolean; role?: 'admin' | 'staff' | 'pioneer' };
   unlocked: boolean;
 }
 
@@ -200,12 +200,15 @@ export interface Member {
   banReason: string | null;
   /** Exclusive cosmetics the admin granted ("slot:id"; staff only see this). */
   granted: string[];
+  /** Has access to the friends-only "Первооткрыватели" section (staff only see this). */
+  pioneer: boolean;
 }
 
-export type ModAction = 'disconnect' | 'mute' | 'unmute' | 'nickname' | 'ban' | 'unban' | 'role' | 'delete' | 'cosmetic';
+export type ModAction = 'disconnect' | 'mute' | 'unmute' | 'nickname' | 'ban' | 'unban' | 'role' | 'delete' | 'cosmetic' | 'pioneer';
 
 export interface ModerationEvent {
-  action: 'disconnect' | 'mute' | 'unmute' | 'rename' | 'role';
+  action: 'disconnect' | 'mute' | 'unmute' | 'rename' | 'role' | 'pioneer';
+  on?: boolean;
   by: string | null;
   until?: number;
   nickname?: string;

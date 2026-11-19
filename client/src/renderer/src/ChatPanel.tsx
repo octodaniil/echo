@@ -62,6 +62,8 @@ export function ChatPanel({
   me,
   canModerate,
   person,
+  people,
+  canSeeDeleted,
   onClose,
   onProfile,
 }: {
@@ -71,11 +73,16 @@ export function ChatPanel({
   /** Staff may delete others' messages in channels. */
   canModerate: boolean;
   person: (id: string) => ChatPerson;
+  /** Everyone who can be @mentioned (id + person). */
+  people: { id: string; person: ChatPerson }[];
+  /** Admin / moderators see "message deleted" placeholders; others don't see them at all. */
+  canSeeDeleted: boolean;
   onClose?: () => void;
   onProfile: (id: string) => void;
 }) {
   const store = useChat();
-  const list = store.messages.get(conv);
+  const all = store.messages.get(conv);
+  const list = all && (canSeeDeleted ? all : all.filter((m) => !m.deleted));
   const [text, setText] = useState('');
   const [reply, setReply] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -84,6 +91,10 @@ export function ChatPanel({
   const [busy, setBusy] = useState(false);
   const [viewer, setViewer] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
+  /** Image waiting to be sent together with the text (pasted / dropped / picked). */
+  const [pending, setPending] = useState<{ file: File; url: string } | null>(null);
+  /** @mention autocomplete: what was typed after "@", where it starts, which row is selected. */
+  const [mention, setMention] = useState<{ query: string; start: number; index: number } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const file = useRef<HTMLInputElement>(null);
@@ -127,9 +138,16 @@ export function ChatPanel({
     return [...ids].map((id) => person(id).nickname).sort((a, b) => b.length - a.length);
   }, [list?.length]);
 
-  const send = async (attachment?: File) => {
+  const stage = (file: File) => {
+    if (pending) URL.revokeObjectURL(pending.url);
+    setPending({ file, url: URL.createObjectURL(file) });
+    input.current?.focus();
+  };
+
+  const send = async () => {
     const body = text;
-    if (!body.trim() && !attachment) return;
+    const attachment = pending?.file;
+    if (busy || (!body.trim() && !attachment)) return;
     setBusy(true);
     setError(null);
     try {
@@ -141,16 +159,79 @@ export function ChatPanel({
       }
       setText('');
       setReply(null);
+      if (pending) URL.revokeObjectURL(pending.url);
+      setPending(null);
       stick.current = true;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
-      input.current?.focus();
+      // The textarea stays enabled while sending, so focus never leaves it.
+      requestAnimationFrame(() => input.current?.focus());
     }
   };
 
+  // ---- @mentions ----
+  const candidates = mention
+    ? [
+        ...people
+          .filter((p) => p.id !== me && p.person.nickname.toLowerCase().includes(mention.query.toLowerCase()))
+          .sort(
+            (a, b) =>
+              Number(!a.person.nickname.toLowerCase().startsWith(mention.query.toLowerCase())) -
+                Number(!b.person.nickname.toLowerCase().startsWith(mention.query.toLowerCase())) ||
+              a.person.nickname.localeCompare(b.person.nickname, 'ru'),
+          )
+          .slice(0, 7),
+        ...('все'.startsWith(mention.query.toLowerCase()) && conv.startsWith('ch:')
+          ? [{ id: '*', person: { nickname: 'все', avatar: null } as ChatPerson }]
+          : []),
+      ]
+    : [];
+
+  const updateMention = (value: string, caret: number) => {
+    const m = /(^|\s)@([^\s@]{0,32})$/.exec(value.slice(0, caret));
+    setMention(m ? { query: m[2]!, start: caret - m[2]!.length - 1, index: 0 } : null);
+  };
+
+  const pickMention = (nick: string) => {
+    if (!mention) return;
+    const el = input.current;
+    const caret = el?.selectionStart ?? text.length;
+    const next = `${text.slice(0, mention.start)}@${nick} ${text.slice(caret)}`;
+    setText(next);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const pos = mention.start + nick.length + 2;
+      el?.focus();
+      el?.setSelectionRange(pos, pos);
+    });
+  };
+
   const onKey = (e: KeyboardEvent) => {
+    if (mention && candidates.length > 0) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const d = e.key === 'ArrowDown' ? 1 : -1;
+        setMention({ ...mention, index: (mention.index + d + candidates.length) % candidates.length });
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        pickMention(candidates[mention.index]!.person.nickname);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMention(null);
+        return;
+      }
+    }
+    if (e.key === 'Escape' && pending) {
+      URL.revokeObjectURL(pending.url);
+      setPending(null);
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void send();
@@ -162,12 +243,16 @@ export function ChatPanel({
         e.preventDefault();
         setEditing(mine.id);
         setEditText(mine.text);
+        requestAnimationFrame(() =>
+          scroller.current?.querySelector('.msg-edit')?.scrollIntoView({ block: 'nearest' }),
+        );
       }
     }
   };
 
   const onInput = (e: JSX.TargetedEvent<HTMLTextAreaElement>) => {
     setText(e.currentTarget.value);
+    updateMention(e.currentTarget.value, e.currentTarget.selectionStart ?? e.currentTarget.value.length);
     if (Date.now() - lastTyping.current > 3000) {
       lastTyping.current = Date.now();
       void window.echo.chatTyping(conv).catch(() => {});
@@ -178,7 +263,7 @@ export function ChatPanel({
     const f = [...(e.clipboardData?.files ?? [])].find((x) => x.type.startsWith('image/'));
     if (f) {
       e.preventDefault();
-      void send(f);
+      stage(f);
     }
   };
 
@@ -186,6 +271,7 @@ export function ChatPanel({
     try {
       if (editText.trim() && editText !== m.text) await window.echo.chatEdit(m.id, editText);
       setEditing(null);
+      requestAnimationFrame(() => input.current?.focus());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -208,7 +294,7 @@ export function ChatPanel({
         e.preventDefault();
         setDrag(false);
         const f = [...(e.dataTransfer?.files ?? [])].find((x) => x.type.startsWith('image/'));
-        if (f) void send(f);
+        if (f) stage(f);
       }}
     >
       <header class="chat-head">
@@ -274,7 +360,10 @@ export function ChatPanel({
                           if (e.key === 'Enter' && !e.shiftKey) {
                             e.preventDefault();
                             void saveEdit(m);
-                          } else if (e.key === 'Escape') setEditing(null);
+                          } else if (e.key === 'Escape') {
+                            setEditing(null);
+                            requestAnimationFrame(() => input.current?.focus());
+                          }
                         }}
                       />
                       <span class="muted tiny">Enter — сохранить · Esc — отмена</span>
@@ -368,6 +457,49 @@ export function ChatPanel({
           </div>
         )}
         {error && <div class="compose-error">{error}</div>}
+        {pending && (
+          <div class="compose-pending">
+            <img src={pending.url} alt="" />
+            <span class="muted tiny">
+              Картинка добавлена — напиши подпись или просто нажми Enter. Esc — убрать.
+            </span>
+            <button
+              class="icon-btn"
+              title="Убрать картинку"
+              onClick={() => {
+                URL.revokeObjectURL(pending.url);
+                setPending(null);
+                input.current?.focus();
+              }}
+            >
+              <CloseIcon size={14} />
+            </button>
+          </div>
+        )}
+        {mention && candidates.length > 0 && (
+          <div class="mention-list">
+            {candidates.map((c, i) => (
+              <button
+                key={c.id}
+                class={`mention-item${i === mention.index ? ' active' : ''}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pickMention(c.person.nickname);
+                }}
+                onMouseEnter={() => setMention({ ...mention, index: i })}
+              >
+                {c.id === '*' ? (
+                  <span class="mention-all mono">@</span>
+                ) : (
+                  <Avatar id={c.id} name={c.person.nickname} avatar={c.person.avatar} size={22} animated={false} />
+                )}
+                <Nick name={c.person.nickname} look={c.person.style} />
+                <RoleTag role={c.person.role} />
+                {c.id === '*' && <span class="muted tiny">упомянуть всех в канале</span>}
+              </button>
+            ))}
+          </div>
+        )}
         <div class="compose-row">
           <input
             ref={file}
@@ -377,7 +509,7 @@ export function ChatPanel({
             onChange={(e) => {
               const f = e.currentTarget.files?.[0];
               e.currentTarget.value = '';
-              if (f) void send(f);
+              if (f) stage(f);
             }}
           />
           <button class="compose-attach" title="Картинка или GIF (можно вставить Ctrl+V или перетащить)" onClick={() => file.current?.click()}>
@@ -388,13 +520,14 @@ export function ChatPanel({
             value={text}
             rows={Math.min(6, Math.max(1, text.split('\n').length))}
             maxLength={2000}
-            placeholder="Сообщение… (@ник — упомянуть)"
-            disabled={busy}
+            placeholder="Сообщение… (@ — упомянуть, ↑ — изменить последнее)"
             onInput={onInput}
+            onClick={(e) => updateMention(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
+            onBlur={() => window.setTimeout(() => setMention(null), 150)}
             onKeyDown={onKey}
             onPaste={onPaste}
           />
-          <button class="compose-send" title="Отправить (Enter)" disabled={busy || !text.trim()} onClick={() => void send()}>
+          <button class="compose-send" title="Отправить (Enter)" disabled={busy || (!text.trim() && !pending)} onClick={() => void send()}>
             ➤
           </button>
         </div>

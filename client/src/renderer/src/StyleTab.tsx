@@ -8,6 +8,7 @@ const GROUPS = [
   { id: 'basic', title: 'БАЗОВЫЕ — ДЛЯ ВСЕХ' },
   { id: 'level', title: 'ЗА УРОВЕНЬ' },
   { id: 'achievement', title: 'ЗА АЧИВКИ' },
+  { id: 'pioneer', title: 'ДЛЯ ПЕРВООТКРЫВАТЕЛЕЙ — ТОЛЬКО ДЛЯ СВОИХ' },
   { id: 'exclusive', title: 'ЭКСКЛЮЗИВ АДМИНИСТРАЦИИ' },
 ] as const;
 
@@ -47,6 +48,7 @@ export function StyleTab({ session }: { session: Session }) {
   const requirement = (c: Cosmetic) => {
     if (c.unlock.role === 'admin') return 'Только админ';
     if (c.unlock.role === 'staff') return 'Админ и модераторы';
+    if (c.unlock.role === 'pioneer') return 'Для первооткрывателей';
     if (c.unlock.level) return `Уровень ${c.unlock.level}`;
     if (c.unlock.achievement) {
       const def = achievements.find((a) => a.code === c.unlock.achievement);

@@ -409,3 +409,63 @@
 .userbar .nick .role-tag {
   flex-shrink: 0;
 }
+
+
+/* ---------- friends ("Первооткрыватели") ---------- */
+
+.member.plate-topo {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Ccircle cx='13' cy='13' r='10' fill='none' stroke='%23ffd678' stroke-opacity='.55'/%3E%3Cpath d='M13 3l2 10-2 10-2-10z' fill='%23ffd678' fill-opacity='.55'/%3E%3Cpath d='M3 13l10 2 10-2-10-2z' fill='%235fe3b0' fill-opacity='.45'/%3E%3C/svg%3E")
+      right 10px center / 22px 22px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Cg fill='none' stroke='%235fe3b0' stroke-opacity='.28'%3E%3Cpath d='M0 30c20-14 40 6 60-6s40-14 60 0'/%3E%3Cpath d='M0 20c20-12 40 8 60-4s40-14 60 2'/%3E%3Cpath d='M0 10c20-10 40 8 60-2s40-12 60 4'/%3E%3C/g%3E%3C/svg%3E")
+      left center / 120px 100% repeat-x,
+    linear-gradient(90deg, rgba(20, 60, 46, 0.9), rgba(6, 20, 18, 0.9) 70%);
+  box-shadow:
+    inset 0 0 0 1px rgba(95, 227, 176, 0.45),
+    inset 2px 0 0 #5fe3b0;
+}
+.member.plate-campfire {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(1.5px 1.5px at 18% 30%, #ffd36b, transparent),
+    radial-gradient(1px 1px at 30% 18%, #ffb02e, transparent),
+    radial-gradient(1.5px 1.5px at 44% 34%, #ffe08a, transparent),
+    radial-gradient(1px 1px at 58% 22%, #ff8a3d, transparent),
+    radial-gradient(160px 40px at 30% 130%, rgba(255, 120, 30, 0.55), transparent 70%),
+    linear-gradient(90deg, #2a1206, #120806 80%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 150, 60, 0.4),
+    inset 2px 0 0 #ff8a3d;
+}
+.nfx-pioneer {
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 750;
+  background-image: linear-gradient(90deg, #8ff5cf, #ffe7a6 55%, #5fe3b0);
+  filter: drop-shadow(0 0 4px rgba(95, 227, 176, 0.55));
+}
+.nfx-sunset {
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 750;
+  background-image: linear-gradient(90deg, #ffb347, #ff6f91 50%, #b48cff);
+  filter: drop-shadow(0 0 4px rgba(255, 111, 145, 0.5));
+}
+.cosmetic-group.pioneer {
+  color: #5fe3b0;
+}
+.ach-tab.pioneers {
+  color: #5fe3b0;
+}
+.ach-tab.pioneers.active {
+  color: #5fe3b0;
+  background: rgba(95, 227, 176, 0.14);
+  box-shadow: inset 0 -2px 0 #5fe3b0;
+}
+.mod-btn.pioneer.on {
+  color: #04261a;
+  background: linear-gradient(90deg, #8ff5cf, #5fe3b0);
+}

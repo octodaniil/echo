@@ -312,7 +312,7 @@ function registerIpc() {
     const id = encodeURIComponent(userId);
     if (action === 'nickname') return authed(requireSession(), `/api/mod/${id}/nickname`, { method: 'PATCH', body });
     if (action === 'delete') return authed(requireSession(), `/api/users/${id}`, { method: 'DELETE' });
-    if (!['disconnect', 'mute', 'unmute', 'ban', 'unban', 'role', 'cosmetic'].includes(action)) throw new Error('Неизвестное действие');
+    if (!['disconnect', 'mute', 'unmute', 'ban', 'unban', 'role', 'cosmetic', 'pioneer'].includes(action)) throw new Error('Неизвестное действие');
     return authed(requireSession(), `/api/mod/${id}/${action}`, { method: 'POST', body: body ?? {} });
   });
   handle('channels:move', (channelId: number, userId: string) =>

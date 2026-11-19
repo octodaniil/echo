@@ -304,6 +304,9 @@ export function Main({
         } else if (m.action === 'rename' && m.nickname) {
           showToast(`Тебе сменили ник на «${m.nickname}»${by}`, 6000);
           onSession({ ...session, user: { ...session.user, nickname: m.nickname } });
+        } else if (m.action === 'pioneer') {
+          void reloadCatalog();
+          showToast(m.on ? 'Тебе открыт раздел «Первооткрыватели» — загляни в ачивки и «Стиль»' : 'Доступ к «Первооткрывателям» закрыт', 7000);
         } else if (m.action === 'role') {
           const mod = m.role === 'moderator';
           showToast(mod ? `Ты теперь модератор${by}` : `Роль модератора снята${by}`, 6000);
@@ -501,6 +504,17 @@ export function Main({
           </div>
         )}
 
+        {statusMenu && (
+          <StatusMenu
+            current={myProfile?.status}
+            onProfile={() => {
+              setStatusMenu(false);
+              setProfileId(me.id);
+            }}
+            onClose={() => setStatusMenu(false)}
+            onError={(m) => showToast(m)}
+          />
+        )}
         <footer class="userbar">
           <button class="userbar-me" title="Статус и профиль" onClick={() => setStatusMenu(!statusMenu)}>
             <Avatar
@@ -524,17 +538,6 @@ export function Main({
               />
             </span>
           </button>
-          {statusMenu && (
-            <StatusMenu
-              current={myProfile?.status}
-              onProfile={() => {
-                setStatusMenu(false);
-                setProfileId(me.id);
-              }}
-              onClose={() => setStatusMenu(false)}
-              onError={(m) => showToast(m)}
-            />
-          )}
           <button
             class={`icon-btn${v.micMuted ? ' off' : ''}`}
             title={v.micMuted ? 'Включить микрофон' : 'Выключить микрофон'}
@@ -584,6 +587,8 @@ export function Main({
             me={me.id}
             canModerate={isStaff && chatConv.startsWith('ch:')}
             person={chatPerson}
+            people={allMembers.filter((m) => !m.banned).map((m) => ({ id: m.id, person: chatPerson(m.id) }))}
+            canSeeDeleted={isStaff}
             onClose={() => setChatConv(null)}
             onProfile={setProfileId}
             title={
@@ -641,6 +646,7 @@ export function Main({
           userId={profileId}
           meId={me.id}
           amAdmin={isAdmin}
+          amModerator={myRole === 'moderator'}
           activity={profiles.get(profileId)?.activity ?? null}
           onClose={() => setProfileId(null)}
           onMessage={profileId !== me.id ? () => openDm(profileId) : undefined}
