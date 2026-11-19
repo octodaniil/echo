@@ -72,8 +72,8 @@ export const COSMETICS: Cosmetic[] = [
   item('frame', 'five', 'Пятёрка', 'achievement', { achievement: 'squad_5' }),
   item('frame', 'prism', 'Призма', 'achievement', { unique: true }),
   item('frame', 'pioneer', 'Первопроходец', 'pioneer', { role: 'pioneer' }),
-  item('frame', 'circle', 'Круг основателей', 'pioneer', { achievement: 'p_first_call' }),
-  item('frame', 'bughunter', 'Прицел охотника', 'pioneer', { achievement: 'p_bug_hunter' }),
+  item('frame', 'circle', 'Круг своих', 'pioneer', { achievement: 'p_regular_guest' }),
+  item('frame', 'bughunter', 'Прицел', 'pioneer', { achievement: 'p_game_night' }),
   item('frame', 'architect', 'Архитектор', 'exclusive', { role: 'admin' }),
   item('frame', 'guardian', 'Страж', 'exclusive', { role: 'staff' }),
 
@@ -88,7 +88,7 @@ export const COSMETICS: Cosmetic[] = [
   item('plate', 'flame', 'Пламя', 'achievement', { achievement: 'streak_30' }),
   item('plate', 'air', 'Эфир', 'achievement', { achievement: 'stream_50' }),
   item('plate', 'topo', 'Карта первопроходца', 'pioneer', { role: 'pioneer' }),
-  item('plate', 'campfire', 'Костёр', 'pioneer', { achievement: 'p_night_legend' }),
+  item('plate', 'campfire', 'Костёр', 'pioneer', { achievement: 'p_long_awaited' }),
   item('plate', 'goldcode', 'Золотой код', 'exclusive', { role: 'admin' }),
   item('plate', 'shield', 'Щит', 'exclusive', { role: 'staff' }),
 
@@ -101,7 +101,7 @@ export const COSMETICS: Cosmetic[] = [
   item('name', 'chrome', 'Хром', 'level', { level: 17 }),
   item('name', 'holo', 'Голограмма', 'achievement', { unique: true }),
   item('name', 'pioneer', 'Первопроходец', 'pioneer', { role: 'pioneer' }),
-  item('name', 'sunset', 'Закат', 'pioneer', { achievement: 'p_party' }),
+  item('name', 'sunset', 'Закат', 'pioneer', { achievement: 'p_weekend' }),
   item('name', 'crown', 'Корона', 'exclusive', { role: 'admin' }),
   item('name', 'guard', 'Страж', 'exclusive', { role: 'staff' }),
 ];

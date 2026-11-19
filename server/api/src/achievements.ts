@@ -96,57 +96,60 @@ export const CATALOG: AchievementDef[] = [
   { code: 'new_year', title: 'С Новым годом!', description: 'Встретил Новый год в голосовом канале', rarity: 'legendary', category: 'secret', icon: 'sparkle', hidden: true },
   { code: 'comeback', title: 'Блудный сын', description: 'Вернулся в голос после 30 дней отсутствия', rarity: 'rare', category: 'secret', icon: 'door', hidden: true },
 
-  // ---------- pioneers: friends and first users (given by the admin / moderators) ----------
+  // ---------- pioneers ("Первооткрыватели"): friends who drop in now and then ----------
+  // Auto ones reward what an occasional friend actually does (dropping in, coming back,
+  // a game night, a weekend or holiday together) so they keep up with daily regulars;
+  // the honours are given by the admin / moderators.
   ...pioneers([
-    // one of a kind
-    ['p_first_friend', 'Первый друг', 'Первым из друзей пришёл в Echo', 'unique', 'handshake'],
-    ['p_bug_hunter_1', 'Охотник №1', 'Нашёл больше всех багов, пока Echo был совсем сырым', 'unique', 'bug'],
-    ['p_voice_of_echo', 'Голос Echo', 'Первый голос, прозвучавший в Echo после основателя', 'unique', 'mic'],
-    ['p_right_hand', 'Правая рука', 'Помогал строить Echo с самого начала', 'unique', 'shield'],
+    // one of a kind — honours
+    ['p_best_friend', 'Лучший друг', 'Особое место в компании — выдаёт админ', 'unique', 'heart', true],
+    ['p_mascot', 'Талисман', 'Когда он в пати, всем везёт', 'unique', 'star', true],
+    ['p_voice_of_reason', 'Голос разума', 'Тот, кого слушают, когда все спорят', 'unique', 'mic', true],
+    ['p_soul', 'Душа Echo', 'Без него здесь было бы совсем не так', 'unique', 'sparkle', true],
     // legendary
-    ['p_first_call', 'Первый созвон', 'Был на самом первом созвоне в Echo', 'legendary', 'broadcast'],
-    ['p_muse', 'Муза', 'Подкинул идею, которая стала частью Echo', 'legendary', 'sparkle'],
-    ['p_beta_veteran', 'Ветеран беты', 'Пережил все сырые версии и не ушёл', 'legendary', 'medal'],
-    ['p_night_legend', 'Легенда ночи', 'Тот самый ночной созвон, который все запомнили', 'legendary', 'moon'],
-    ['p_clutch', 'Клатч века', 'Затащил так, что это обсуждали неделю', 'legendary', 'trophy'],
-    ['p_heart', 'Сердце компании', 'Без него созвоны уже не те', 'legendary', 'heart'],
+    ['p_always_welcome', 'Всегда желанный гость', 'Заходит редко, но каждый раз — праздник', 'legendary', 'door', true],
+    ['p_veteran_friend', 'Друг со стажем', 'Был в голосе в шести разных месяцах', 'legendary', 'calendar', false],
+    ['p_party_maker', 'Собрал всех', 'Был в канале, где собрались шестеро и больше', 'legendary', 'people', false],
+    ['p_clutch', 'Клатч века', 'Затащил так, что это обсуждали неделю', 'legendary', 'trophy', true],
+    ['p_heart', 'Сердце компании', 'Без него созвоны уже не те', 'legendary', 'heart', true],
     // epic
-    ['p_bug_hunter', 'Охотник за багами', 'Нашёл баг и рассказал о нём', 'epic', 'bug'],
-    ['p_crash_test', 'Краш-тестер', 'Сломал Echo так, как никто не ожидал', 'epic', 'flask'],
-    ['p_stream_zero', 'Нулевой эфир', 'Стримил, когда трансляции ещё глючили', 'epic', 'tv'],
-    ['p_party', 'Тусовщик', 'Собрал полный канал друзей', 'epic', 'people'],
-    ['p_dj', 'Диджей', 'Включил музыку на весь канал — и никто не ушёл', 'epic', 'music'],
-    ['p_meme_lord', 'Мем-лорд', 'Шутка, которую повторяют до сих пор', 'epic', 'star'],
-    ['p_mentor', 'Наставник', 'Научил кого-то из друзей играть', 'epic', 'compass'],
-    ['p_peacemaker', 'Миротворец', 'Помирил всех после проигранной катки', 'epic', 'handshake'],
+    ['p_regular_guest', 'Свой человек', 'Был в голосе в трёх разных месяцах', 'epic', 'home', false],
+    ['p_long_awaited', 'Долгожданный', 'Вернулся в голос после двух недель тишины', 'epic', 'flag', false],
+    ['p_game_night', 'Игровая ночь', 'Два часа подряд в голосе с компанией из троих и больше', 'epic', 'gamepad', false],
+    ['p_weekend', 'Выходные с друзьями', 'Был в голосе и в субботу, и в воскресенье одних выходных', 'epic', 'calendar', false],
+    ['p_holiday', 'Праздник с друзьями', 'Был в голосе в праздник: Новый год, 23 февраля, 8 марта, 9 мая', 'epic', 'cake', false],
+    ['p_mvp', 'MVP вечера', 'Лучший игрок вечера по мнению компании', 'epic', 'medal', true],
+    ['p_meme_lord', 'Мем-лорд', 'Шутка, которую повторяют до сих пор', 'epic', 'star', true],
+    ['p_peacemaker', 'Миротворец', 'Помирил всех после проигранной катки', 'epic', 'handshake', true],
     // rare
-    ['p_invite', 'Позвал друга', 'Привёл нового человека в Echo', 'rare', 'door'],
-    ['p_late', 'Опоздун', 'Опоздал на собранный созвон на целый час', 'rare', 'timer'],
-    ['p_afk', 'Ушёл за чаем', 'Весь созвон был AFK, но формально присутствовал', 'rare', 'coffee'],
-    ['p_echo_echo', 'Эхо-эхо', 'Забыл про колонки — и все услышали себя', 'rare', 'echo'],
-    ['p_muted_talk', 'Говорю в пустоту', 'Долго рассказывал что-то с выключенным микрофоном', 'rare', 'micoff'],
-    ['p_loudest', 'Громкость 200%', 'Самый громкий крик в истории канала', 'rare', 'wave'],
-    ['p_first_word', 'Первое слово', 'Написал одно из первых сообщений в чате Echo', 'rare', 'chat'],
+    ['p_crowd', 'Ворвался в тусовку', 'Зашёл, когда в канале уже сидели трое и больше', 'rare', 'broadcast', false],
+    ['p_friday', 'Пятничный вечер', 'Был в голосе в пятницу после семи вечера', 'rare', 'moon', false],
+    ['p_late', 'Опоздун', 'Опоздал на собранный созвон на целый час', 'rare', 'timer', true],
+    ['p_afk', 'Ушёл за чаем', 'Весь созвон был AFK, но формально присутствовал', 'rare', 'coffee', true],
+    ['p_echo_echo', 'Эхо-эхо', 'Забыл про колонки — и все услышали себя', 'rare', 'echo', true],
+    ['p_muted_talk', 'Говорю в пустоту', 'Долго рассказывал что-то с выключенным микрофоном', 'rare', 'micoff', true],
+    ['p_loudest', 'Громкость 200%', 'Самый громкий крик в истории канала', 'rare', 'wave', true],
+    ['p_invite', 'Позвал друга', 'Привёл нового человека в Echo', 'rare', 'door', true],
     // common
-    ['p_hello', 'Привет, Echo', 'Один из первооткрывателей Echo', 'common', 'flag'],
-    ['p_feedback', 'Отзыв', 'Рассказал, что думает о новой версии', 'common', 'chat'],
-    ['p_screenshot', 'Скриншотер', 'Прислал скриншот с багом', 'common', 'stack'],
-    ['p_tester', 'Тестировщик', 'Первым попробовал новую фичу', 'common', 'joystick'],
-    ['p_birthday', 'С днём рождения!', 'Поздравили всем каналом', 'common', 'cake'],
+    ['p_hello', 'Привет, Echo', 'Получил доступ к разделу «Первооткрыватели»', 'common', 'flag', false],
+    ['p_drop_in', 'На огонёк', 'Заглянул в голос, где уже кто-то сидит', 'common', 'coffee', false],
+    ['p_first_word', 'Первое слово', 'Написал первое сообщение в чат', 'common', 'chat', false],
+    ['p_birthday', 'С днём рождения!', 'Поздравили всем каналом', 'common', 'cake', true],
+    ['p_feedback', 'Отзыв', 'Рассказал, что думает о новой версии Echo', 'common', 'chat', true],
   ]),
 ];
 
-function pioneers(rows: [string, string, string, Rarity, string][]): AchievementDef[] {
-  return rows.map(([code, title, description, rarity, icon]) => ({
+function pioneers(rows: [string, string, string, Rarity, string, boolean][]): AchievementDef[] {
+  return rows.map(([code, title, description, rarity, icon, manual]) => ({
     code,
     title,
     description,
     rarity,
     category: 'pioneers' as const,
     icon,
-    manual: true,
     pioneer: true,
-    ...(rarity === 'unique' ? { unique: true, description: `${description}. Такая ачивка может быть только у одного человека` } : {}),
+    ...(manual ? { manual: true } : {}),
+    ...(rarity === 'unique' ? { unique: true, description: `${description}. Такая может быть только у одного человека` } : {}),
   }));
 }
 
@@ -236,6 +239,12 @@ const q = {
   ),
   userCount: db.prepare('SELECT COUNT(*) AS n FROM users'),
 };
+
+/** Friends-only achievements go only to people who can see the section. */
+export function awardFriend(userId: string, code: string) {
+  const u = queries.userById.get(userId) as User | undefined;
+  if (u && (u.is_pioneer || u.is_admin || u.is_moderator)) award(userId, code);
+}
 
 /** Who holds a unique achievement (if anyone). */
 export function holderOf(code: string): string | null {
@@ -386,6 +395,18 @@ function markDay(userId: string, now: number) {
   }
   if ((q.days.all(userId) as unknown[]).length >= 100) award(userId, 'regular_100');
   if ((q.nights.get(userId) as { n: number }).n >= 10) award(userId, 'night_owl_10');
+
+  // friends who drop in now and then
+  if (prev && dayNumber(t.day) - dayNumber(prev.day) >= 14) awardFriend(userId, 'p_long_awaited');
+  const months = new Set((q.days.all(userId) as { day: string }[]).map((r) => r.day.slice(0, 7))).size;
+  if (months >= 3) awardFriend(userId, 'p_regular_guest');
+  if (months >= 6) awardFriend(userId, 'p_veteran_friend');
+  if (t.weekday === 'Sun' && prev && dayNumber(t.day) - dayNumber(prev.day) === 1) awardFriend(userId, 'p_weekend');
+  if (t.weekday === 'Fri' && t.hour >= 19) awardFriend(userId, 'p_friday');
+  const md = `${t.month}-${t.date}`;
+  if ((t.month === 1 && t.date <= 8) || (t.month === 12 && t.date === 31) || ['2-23', '3-8', '5-9'].includes(md)) {
+    awardFriend(userId, 'p_holiday');
+  }
 }
 
 // ---------- voice sessions ----------
@@ -422,6 +443,9 @@ export function voiceJoined(userId: string, room: string) {
   if (prev && prev.room !== room) voiceLeft(userId, prev.room);
   if (!sessions.has(userId)) sessions.set(userId, { room, since: now, accounted: now, aloneSince: null });
   award(userId, 'first_steps');
+  const others = [...sessions].filter(([id, s]) => id !== userId && s.room === room).length;
+  if (others >= 1) awardFriend(userId, 'p_drop_in');
+  if (others >= 3) awardFriend(userId, 'p_crowd');
   markDay(userId, now);
   checkClock(userId, now, true);
 
@@ -451,6 +475,9 @@ function flush(userId: string, s: Session, now: number) {
   checkVoiceTotals(userId);
   checkSocial(userId);
   if (now - s.since >= 4 * HOUR * 1000) award(userId, 'marathon');
+  if (now - s.since >= 2 * HOUR * 1000 && [...sessions].filter(([id, o]) => id !== userId && o.room === s.room).length >= 2) {
+    awardFriend(userId, 'p_game_night');
+  }
   if (now - s.since >= 8 * HOUR * 1000) award(userId, 'all_nighter');
 
   const alone = ![...sessions].some(([id, other]) => id !== userId && other.room === s.room);
@@ -619,6 +646,7 @@ export function roomMembers(room: string, userIds: string[]) {
   for (const id of userIds) if (!sessions.has(id)) voiceJoined(id, room);
   if (userIds.length >= 5) for (const id of userIds) award(id, 'full_house');
   if (userIds.length >= 8) for (const id of userIds) award(id, 'big_house');
+  if (userIds.length >= 6) for (const id of userIds) awardFriend(id, 'p_party_maker');
 }
 
 // ---------- streams ----------

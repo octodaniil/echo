@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   award,
+  awardFriend,
   catalogFor,
   CATEGORIES,
   definition,
@@ -572,6 +573,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const body = parse(z.object({ text: z.string(), replyTo: z.number().int().positive().nullable().default(null) }), req.body);
     const message = await guard(() => chat.post(conv, req.user, body.text, body.replyTo, null));
     deliver(conv, 'new', message);
+    awardFriend(req.user.id, 'p_first_word');
     return { message };
   });
 
