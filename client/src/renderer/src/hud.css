@@ -686,6 +686,10 @@ input[type='radio'] {
   border: none;
   box-shadow: inset 0 0 0 1px rgba(255, 61, 139, 0.4);
   background: linear-gradient(90deg, rgba(255, 61, 139, 0.14), rgba(10, 18, 30, 0.9) 70%);
+  /* No chamfer here: clip-path would cut off the stream settings popover that opens below. */
+  clip-path: none;
+  position: relative;
+  z-index: 6;
 }
 
 /* ---------- buttons ---------- */
@@ -1483,4 +1487,26 @@ input[type='range']::-webkit-slider-thumb {
   margin-top: 6px;
   color: var(--warn);
   letter-spacing: 0.04em;
+}
+
+/* "stop watching" in the bottom panel */
+.round-btn.watching {
+  width: 96px;
+  color: var(--hot);
+  background: rgba(255, 61, 139, 0.1);
+}
+.round-btn.watching:hover:not(:disabled) {
+  background: rgba(255, 61, 139, 0.22);
+}
+
+/* stream settings above the self-preview window, with room inside the cut corners */
+.sharing-bar {
+  z-index: 40;
+}
+.stream-settings-popover {
+  padding: 14px 16px 14px 18px !important;
+}
+/* inner wrapper of the stream settings: no corner cut (it clipped the first label) */
+.stream-options {
+  clip-path: none !important;
 }

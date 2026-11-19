@@ -1282,6 +1282,12 @@ function VoiceStage({
           <ScreenIcon />
           <span class="rb-label">{state.sharing ? 'СТОП' : 'ЭФИР'}</span>
         </button>
+        {state.watching && (
+          <button class="round-btn watching" title="Перестать смотреть трансляцию" onClick={() => voice.unwatch()}>
+            <ScreenOffIcon />
+            <span class="rb-label">ЗАКРЫТЬ ЭФИР</span>
+          </button>
+        )}
         <span class="dock-sep" />
         <button class="round-btn danger" title="Отключиться" onClick={() => void voice.leave()}>
           <HangUpIcon />
