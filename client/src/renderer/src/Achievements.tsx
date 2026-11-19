@@ -178,7 +178,7 @@ export function Badge({
   return (
     <span
       class={`badge r-${def.rarity}${locked ? ' locked' : ''}`}
-      style={{ width: Math.round(size * 1.1547), height: size }}
+      style={{ width: size, height: Math.round(size * 1.1) }}
       data-ach={title === '' ? undefined : def.code}
     >
       <span class="badge-inner">

@@ -530,7 +530,6 @@ export function Main({
             <span class="userbar-name">
               <span class="nick">
                 <Nick name={me.nickname} look={myProfile?.style} />
-                <RoleTag role={myRole} />
               </span>
               <StatusLine
                 status={myProfile?.status}
