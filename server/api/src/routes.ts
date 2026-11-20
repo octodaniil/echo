@@ -143,20 +143,28 @@ export async function registerRoutes(app: FastifyInstance) {
     const { id } = parse(z.object({ id: z.string() }), req.params);
     const user = queries.userById.get(id) as User | undefined;
     if (!user) throw new HttpError(404, 'Пользователь не найден');
+    // The full achievement list is private: only the owner (and staff, to give / take
+    // achievements) gets it; everyone else sees just what the owner pinned to the profile.
+    const isMe = id === req.user.id;
+    const full = isMe || rank(req.user) > 0;
+    const pinned = getPinned(id);
+    const visible = listAchievements(id)
+      // Friends-only achievements stay invisible to viewers without access.
+      .filter((a) => pioneerAccess(req.user) || !definition(a.code)?.pioneer)
+      .filter((a) => full || pinned.includes(a.code));
     return {
       profile: {
         ...publicUser(user),
         createdAt: user.created_at,
         lastSeenAt: user.last_seen_at,
         ...getStats(id),
-        // Friends-only achievements stay invisible to viewers without access.
-        achievements: listAchievements(id).filter((a) => pioneerAccess(req.user) || !definition(a.code)?.pioneer),
-        // Hidden achievements this person has earned are shown in full on their profile.
-        revealed: listAchievements(id)
-          .map((a) => definition(a.code))
-          .filter((d) => d?.hidden),
-        pinned: getPinned(id),
-        progress: progressOf(id),
+        achievements: visible,
+        achievementsTotal: listAchievements(id).filter((a) => pioneerAccess(req.user) || !definition(a.code)?.pioneer).length,
+        fullAchievements: full,
+        // Hidden achievements that are visible here are shown with their real definition.
+        revealed: visible.map((a) => definition(a.code)).filter((d) => d?.hidden),
+        pinned,
+        progress: isMe ? progressOf(id) : {},
         prestige: prestigeOf(id),
         uniques: uniquesMap().get(id) ?? [],
         style: styleOf(id),
