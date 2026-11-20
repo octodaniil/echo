@@ -32,6 +32,10 @@ export class MicPipeline {
   private destroyed = false;
   /** Recent recoveries, for diagnostics (window.__echo.voice / settings). */
   readonly log: string[] = [];
+  /** Since when the processed signal is broken (NaN) or flat zero while the mic clearly hears sound. */
+  private stalledSince = 0;
+  private lastRebuild = 0;
+  private recoverListeners = new Set<(reason: string) => void>();
   /** Input levels of the last 3 s (one per 20 ms tick), for the noise floor. */
   private readonly recent = new Float32Array(150).fill(-60);
   private recentPos = 0;
@@ -79,6 +83,45 @@ export class MicPipeline {
   /** The processed track to publish. */
   get track(): MediaStreamTrack {
     return this.dest.stream.getAudioTracks()[0]!;
+  }
+
+  /** Called when Echo had to restart the microphone or the noise suppressor by itself. */
+  onRecover(fn: (reason: string) => void) {
+    this.recoverListeners.add(fn);
+    return () => this.recoverListeners.delete(fn);
+  }
+
+  private note(reason: string) {
+    const line = `${new Date().toLocaleTimeString('ru-RU')} ${reason}`;
+    this.log.push(line);
+    if (this.log.length > 20) this.log.shift();
+    console.warn('[mic]', line);
+    for (const fn of this.recoverListeners) fn(reason);
+  }
+
+  /**
+   * Rebuilds the processing part of the graph (RNNoise worklet + source) on the same mic
+   * stream. RNNoise runs on its own audio thread: if it ever outputs NaN, every later
+   * sample stays NaN (NaN × gain = NaN), the level reads "not a number", voice activation
+   * never opens again and friends hear silence — until the whole pipeline is rebuilt,
+   * which is why rejoining the channel used to be the only cure.
+   */
+  private async rebuildProcessing(reason: string) {
+    if (this.recovering || this.destroyed || !this.applied || !this.stream) return;
+    if (Date.now() - this.lastRebuild < 5000) return;
+    this.lastRebuild = Date.now();
+    this.recovering = true;
+    this.note(`шумодав перезапущен: ${reason}`);
+    try {
+      await this.rewire(this.applied);
+      this.recent.fill(-60);
+      this.noiseFloor = -60;
+      this.stalledSince = 0;
+    } catch (err) {
+      console.warn('[mic] rebuild failed', err);
+    } finally {
+      this.recovering = false;
+    }
   }
 
   onGateChange(fn: (open: boolean) => void) {
@@ -166,10 +209,7 @@ export class MicPipeline {
     if (this.deadSince && this.lastRecovery) this.failedRecoveries++;
     this.recovering = true;
     this.lastRecovery = Date.now();
-    const line = `${new Date().toLocaleTimeString('ru-RU')} микрофон переподключён: ${reason}`;
-    this.log.push(line);
-    if (this.log.length > 20) this.log.shift();
-    console.warn('[mic]', line);
+    this.note(`микрофон переподключён: ${reason}`);
     try {
       if (this.ctx.state !== 'running') await this.ctx.resume().catch(() => {});
       const s = this.applied;
@@ -237,9 +277,31 @@ export class MicPipeline {
 
     this.analyser.getFloatTimeDomainData(this.samples);
     let sum = 0;
-    for (const v of this.samples) sum += v * v;
-    const db = Math.max(-100, 10 * Math.log10(sum / this.samples.length + 1e-12));
+    let procPeak = 0;
+    let broken = false;
+    for (const v of this.samples) {
+      if (!Number.isFinite(v)) {
+        broken = true;
+        break;
+      }
+      sum += v * v;
+      procPeak = Math.max(procPeak, Math.abs(v));
+    }
+    // Watchdog #2, after the noise suppressor: broken samples, or dead-flat zeros while the
+    // raw mic clearly hears something (≈ -46 dB peak) for 3 s = the processing hung.
+    const hearsSound = peak > 0.005 && s.inputVolume > 0;
+    if (broken || (hearsSound && procPeak === 0)) {
+      this.stalledSince ||= performance.now();
+      if (broken || performance.now() - this.stalledSince > 3000) {
+        void this.rebuildProcessing(broken ? 'битый звук (NaN)' : 'завис и молчал');
+      }
+    } else {
+      this.stalledSince = 0;
+    }
+    const raw = broken ? -100 : 10 * Math.log10(sum / this.samples.length + 1e-12);
+    const db = Number.isFinite(raw) ? Math.max(-100, raw) : -100;
     this.level = db;
+    if (!Number.isFinite(this.noiseFloor)) this.noiseFloor = -60;
 
     // Noise floor = the quietest moment of the last 3 s ("minimum statistics"): speech
     // always has gaps, steady noise doesn't. The old slowly-rising average crept up during

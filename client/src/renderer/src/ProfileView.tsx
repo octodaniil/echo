@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
-import type { AchievementDef, Activity, Profile, Rarity } from '../../shared/types';
-import { Badge, categories, RARITY_LABEL, UniqueTitles, useCatalog } from './Achievements';
+import type { AchievementDef, Activity, Profile } from '../../shared/types';
+import { Badge, UniqueTitles, useCatalog } from './Achievements';
+import { AchievementsBoard, MAX_PINNED } from './AchievementsBoard';
 import { levelProgress, lookVars, RANK_NAMES } from './look';
 import { StatusLine } from './Status';
 import { GameCover } from './GameCover';
@@ -9,8 +10,6 @@ import { Avatar, Nick } from './Avatar';
 import { bannerUrl } from './profile';
 import { CloseIcon } from './icons';
 
-const RARITY_ORDER: Rarity[] = ['unique', 'legendary', 'epic', 'rare', 'common'];
-const MAX_PINNED = 3;
 
 function hours(secs: number): string {
   const h = Math.floor(secs / 3600);
@@ -44,7 +43,6 @@ export function ProfileView({
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manage, setManage] = useState(false);
-  const [tab, setTab] = useState<string | null>(null);
   const isMe = userId === meId;
 
   const load = () =>
@@ -68,50 +66,11 @@ export function ProfileView({
   // Hidden achievements this person earned come with their real definition.
   const revealed = new Map((profile?.revealed ?? []).map((d) => [d.code, d]));
   const catalog = baseCatalog.map((d) => revealed.get(d.code) ?? d);
-  const owned = new Map((profile?.achievements ?? []).map((a) => [a.code, a.awardedAt]));
   const holo = (profile?.uniques?.length ?? 0) > 0;
   const pinned = profile?.pinned ?? [];
   const byCode = (c: string) => catalog.find((a) => a.code === c);
   const pinnedDefs = pinned.map(byCode).filter((a): a is AchievementDef => !!a);
   const tier = profile?.prestige.tier ?? 0;
-
-  const sortInGroup = (list: AchievementDef[]) =>
-    [...list].sort(
-      (a, b) =>
-        Number(owned.has(b.code)) - Number(owned.has(a.code)) ||
-        RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity),
-    );
-  const groups = [
-    { id: 'all', title: 'Все' },
-    ...categories,
-  ]
-    .map((c) => ({
-      ...c,
-      items: sortInGroup(catalog.filter((a) => c.id === 'all' || a.category === c.id)),
-    }))
-    .filter((g) => g.items.length > 0);
-  const current = groups.find((g) => g.id === tab) ?? groups[0];
-
-  const togglePin = async (code: string) => {
-    if (!isMe || !owned.has(code) || !profile) return;
-    const next = pinned.includes(code) ? pinned.filter((c) => c !== code) : [...pinned, code].slice(-MAX_PINNED);
-    setProfile({ ...profile, pinned: next });
-    try {
-      setProfile({ ...profile, pinned: await window.echo.setPinned(next) });
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
-  const toggleAward = async (code: string) => {
-    try {
-      if (owned.has(code)) await window.echo.revokeAchievement(userId, code);
-      else await window.echo.awardAchievement(userId, code);
-      await load();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
 
   const p = profile?.prestige;
   const progress = levelProgress(p);
@@ -161,9 +120,7 @@ export function ProfileView({
                   <span class="chip-static">в Echo с {new Date(profile.createdAt).toLocaleDateString('ru-RU')}</span>
                   {profile.isAdmin && <span class="chip-static admin">Админ</span>}
                   {profile.isModerator && !profile.isAdmin && <span class="chip-static moderator">Модератор</span>}
-                  <span class="chip-static">
-                    {owned.size} / {catalog.length} ачивок
-                  </span>
+                  <span class="chip-static">{profile.achievementsTotal ?? profile.achievements.length} ачивок</span>
                 </div>
               </div>
               {pinnedDefs.length > 0 && (
@@ -177,6 +134,18 @@ export function ProfileView({
                 </div>
               )}
             </header>
+
+            {isMe && (
+              <section class="profile-section my-achievements">
+                <div class="profile-section-head">
+                  <h3>Мои ачивки</h3>
+                  <small class="muted">
+                    Нажми на полученную, чтобы показать её в профиле (до {MAX_PINNED}). Остальные видишь только ты.
+                  </small>
+                </div>
+                <AchievementsBoard profile={profile} setProfile={setProfile} isMe manage={false} reload={load} />
+              </section>
+            )}
 
             {p && (
               <div class="rank-card">
@@ -261,83 +230,25 @@ export function ProfileView({
               </section>
             )}
 
+            {!isMe && (
             <section class="profile-section">
               <div class="profile-section-head">
                 <h3>Ачивки</h3>
-                {isMe && <small class="muted">Нажми на полученную, чтобы закрепить в профиле (до {MAX_PINNED})</small>}
-                {(amAdmin || (amModerator && !isMe && !profile.isAdmin)) && (
+                {!manage && <small class="muted">Видны только ачивки, которые {profile.nickname} закрепил в профиле</small>}
+                {(amAdmin || (amModerator && !profile.isAdmin)) && (
                   <button class={`secondary small${manage ? ' active' : ''}`} onClick={() => setManage(!manage)}>
                     {manage ? 'Готово' : 'Выдать / забрать'}
                   </button>
                 )}
               </div>
-              <div class="ach-tabs" role="tablist">
-                {groups.map((g) => (
-                  <button
-                    key={g.id}
-                    role="tab"
-                    class={`ach-tab${current?.id === g.id ? ' active' : ''}${g.id === 'special' ? ' special' : ''}${g.id === 'pioneers' ? ' pioneers' : ''}`}
-                    onClick={() => setTab(g.id)}
-                  >
-                    {g.title}
-                    <span class="ach-tab-count mono">
-                      {g.items.filter((a) => owned.has(a.code)).length}/{g.items.length}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              {current && (
-                  <div key={current.id} class="ach-group fade-in">
-                    <div class="ach-grid">
-                      {current.items.map((d) => {
-                        const has = owned.has(d.code);
-                        const isPinned = pinned.includes(d.code);
-                        const clickable = manage || (isMe && has);
-                        return (
-                          <button
-                            key={d.code}
-                            class={`ach r-${d.rarity}${has ? '' : ' locked'}${isPinned ? ' pinned' : ''}${clickable ? ' clickable' : ''}${manage ? ' manage' : ''}`}
-                            onClick={() => (manage ? void toggleAward(d.code) : void togglePin(d.code))}
-                            disabled={!clickable}
-                          >
-                            <Badge def={d} size={44} locked={!has} title="" />
-                            <span class="ach-text">
-                              <span class="ach-title">
-                                {has || manage ? d.title : d.hidden ? 'Скрытая ачивка' : '???'}
-                                {d.unique && <span class="one-of-one">1 из 1</span>}
-                              </span>
-                              <span class="ach-desc">{d.description}</span>
-                              {!has && !d.hidden && profile.progress?.[d.code] && (
-                                <span class="ach-progress">
-                                  <span class="ach-progress-bar">
-                                    <i
-                                      style={{
-                                        width: `${Math.round((profile.progress[d.code]!.value / profile.progress[d.code]!.target) * 100)}%`,
-                                      }}
-                                    />
-                                  </span>
-                                  <span class="mono">
-                                    {profile.progress[d.code]!.value} / {profile.progress[d.code]!.target} {profile.progress[d.code]!.unit}
-                                  </span>
-                                </span>
-                              )}
-                              <span class={`ach-meta r-${d.rarity}`}>
-                                {RARITY_LABEL[d.rarity]}
-                                {has && ` · ${new Date(owned.get(d.code)!).toLocaleDateString('ru-RU')}`}
-                                {d.unique && !has && (d.holder ? ` · уже у ${d.holder}` : ' · ещё ни у кого')}
-                                {d.hidden && !has && ' · прогресс скрыт'}
-                                {isPinned && ' · закреплена'}
-                                {manage && (has ? ' · забрать' : ' · выдать')}
-                              </span>
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+              {manage && profile.fullAchievements ? (
+                <AchievementsBoard profile={profile} setProfile={setProfile} isMe={false} manage reload={load} />
+              ) : (
+                pinnedDefs.length === 0 && <p class="muted tiny">Пока ничего не закреплено.</p>
               )}
               {error && <div class="error">{error}</div>}
             </section>
+            )}
           </>
         )}
       </div>

@@ -121,6 +121,10 @@ export interface Profile extends User {
   /** How far along countable, not yet earned achievements are (never secret ones). */
   progress?: Record<string, { value: number; target: number; unit: string }>;
   achievements: { code: string; awardedAt: number }[];
+  /** How many achievements they have in total (others only receive the pinned ones). */
+  achievementsTotal?: number;
+  /** True when `achievements` is the full list (own profile, or viewed by staff). */
+  fullAchievements?: boolean;
   pinned: string[];
   prestige: Prestige;
   uniques?: string[];

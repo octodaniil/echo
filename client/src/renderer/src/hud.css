@@ -1499,9 +1499,15 @@ input[type='range']::-webkit-slider-thumb {
   background: rgba(255, 61, 139, 0.22);
 }
 
-/* stream settings above the self-preview window, with room inside the cut corners */
+/* stream bar: above the self-preview (z 5) but below the settings screen (z 20) */
 .sharing-bar {
-  z-index: 40;
+  z-index: 6;
+}
+/* the popover is placed from the gear's screen position and kept inside the window */
+.stream-settings-popover {
+  position: fixed !important;
+  right: auto !important;
+  overflow-y: auto;
 }
 .stream-settings-popover {
   padding: 14px 16px 14px 18px !important;
@@ -1519,4 +1525,38 @@ input[type='range']::-webkit-slider-thumb {
 .empty-ring {
   width: 97px;
   height: 84px;
+}
+
+/* settings: admin section + pioneers access list */
+.settings-nav-title.admin-title {
+  margin-top: 18px;
+  color: #ffc24a;
+}
+.pioneer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pioneer-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  background: rgba(80, 220, 255, 0.04);
+  box-shadow: inset 0 0 0 1px var(--line);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+.pioneer-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.toggle:disabled {
+  opacity: 0.55;
+}
+/* own profile: «Мои ачивки» right under the header */
+.profile-section.my-achievements {
+  margin-top: 18px;
 }

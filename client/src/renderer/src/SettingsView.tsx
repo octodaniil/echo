@@ -1,6 +1,6 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Session, UpdateStatus } from '../../shared/types';
+import type { Member, Session, UpdateStatus } from '../../shared/types';
 import { Avatar } from './Avatar';
 import { CloseIcon } from './icons';
 import type { MicPipeline } from './mic';
@@ -20,18 +20,21 @@ import {
 } from './hotkeys';
 import { voice } from './voice';
 
-type Tab = 'voice' | 'hotkeys' | 'games' | 'account' | 'style' | 'app';
+export type Tab = 'voice' | 'hotkeys' | 'games' | 'account' | 'style' | 'pioneers' | 'app';
 
 export function SettingsView({
   session,
   onSession,
   onClose,
+  initialTab = 'voice',
 }: {
   session: Session;
   onSession: (s: Session) => void;
   onClose: () => void;
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>('voice');
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const admin = session.user.isAdmin;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -67,11 +70,21 @@ export function SettingsView({
           <i class="nav-num">06</i>
           Приложение
         </NavItem>
+        {admin && (
+          <>
+            <div class="settings-nav-title admin-title">Администрирование</div>
+            <NavItem active={tab === 'pioneers'} onClick={() => setTab('pioneers')}>
+              <i class="nav-num">A1</i>
+              Первооткрыватели
+            </NavItem>
+          </>
+        )}
       </nav>
       <section class="settings-body">
         {tab === 'voice' && <VoiceTab />}
         {tab === 'account' && <AccountTab session={session} onSession={onSession} />}
         {tab === 'style' && <StyleTab session={session} />}
+        {tab === 'pioneers' && admin && <PioneersTab session={session} />}
         {tab === 'hotkeys' && <HotkeysTab />}
         {tab === 'games' && <GamesTab />}
         {tab === 'app' && <AppTab session={session} />}
@@ -744,11 +757,12 @@ function Field({ label, children }: { label: string; children: JSX.Element }) {
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <button
       type="button"
       role="switch"
+      disabled={disabled}
       aria-checked={checked}
       class={`toggle${checked ? ' on' : ''}`}
       onClick={(e) => {
@@ -878,5 +892,56 @@ function ChatStorageAdmin() {
         <p class="muted">Загружаем…</p>
       )}
     </>
+  );
+}
+
+/** Admin: who gets the friends-only «Первооткрыватели» section (staff always have it). */
+function PioneersTab({ session }: { session: Session }) {
+  const [list, setList] = useState<Member[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [query, setQuery] = useState('');
+  const load = () => void window.echo.listMembers().then(setList).catch((e: Error) => setMsg({ ok: false, text: e.message }));
+  useEffect(load, []);
+  const toggle = async (m: Member) => {
+    setBusy(m.id);
+    try {
+      await window.echo.moderate(m.id, 'pioneer', { on: !m.pioneer });
+      setList((l) => l?.map((x) => (x.id === m.id ? { ...x, pioneer: !m.pioneer } : x)) ?? l);
+      setMsg({ ok: true, text: m.pioneer ? `${m.nickname}: доступ закрыт` : `${m.nickname} теперь первооткрыватель` });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const q = query.trim().toLowerCase();
+  const people = (list ?? []).filter((m) => m.id !== session.user.id && !m.banned && (!q || m.nickname.toLowerCase().includes(q)));
+  return (
+    <div class="settings-page">
+      <h2>Первооткрыватели</h2>
+      <p class="muted">
+        Кому открыт раздел для своих: вкладка ачивок «Первооткрыватели» и стили для друзей. Ты и модераторы видите его
+        всегда. При открытии человек сразу получает ачивку «Привет, Echo».
+      </p>
+      <input class="members-search" placeholder="Поиск по нику" value={query} onInput={(e) => setQuery(e.currentTarget.value)} />
+      {!list && <p class="muted">Загружаем…</p>}
+      <div class="pioneer-list">
+        {people.map((m) => {
+          const staff = !!m.role;
+          return (
+            <div key={m.id} class="pioneer-row">
+              <Avatar id={m.id} name={m.nickname} avatar={m.avatar} size={30} />
+              <span class="pioneer-who">
+                <b>{m.nickname}</b>
+                <span class="muted tiny">{staff ? 'администрация — доступ всегда' : m.online ? 'в сети' : 'не в сети'}</span>
+              </span>
+              <Toggle checked={staff || m.pioneer} disabled={staff || busy === m.id} onChange={() => void toggle(m)} />
+            </div>
+          );
+        })}
+      </div>
+      {msg && <div class={msg.ok ? 'success' : 'error'}>{msg.text}</div>}
+    </div>
   );
 }

@@ -1316,6 +1316,22 @@ function ViewerChip({ ids, nameOf }: { ids: string[]; nameOf: (id: string) => st
 function StreamSettingsButton() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<{ left: number; top: number; maxHeight: number; width: number } | null>(null);
+  // Anchor under the gear, but never past the window edges (small windows, chat panel open).
+  const measure = () => {
+    const btn = ref.current?.querySelector('button')?.getBoundingClientRect();
+    if (!btn) return;
+    const width = Math.min(450, window.innerWidth - 16);
+    const left = Math.min(Math.max(8, btn.right - width), window.innerWidth - width - 8);
+    const top = btn.bottom + 8;
+    setPlace({ left, top, width, maxHeight: Math.max(160, window.innerHeight - top - 12) });
+  };
+  useEffect(() => {
+    if (!open) return;
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -1335,7 +1351,7 @@ function StreamSettingsButton() {
         <GearIcon size={18} />
       </button>
       {open && (
-        <div class="stream-settings-popover">
+        <div class="stream-settings-popover" style={place ?? { visibility: 'hidden' }}>
           <div class="popover-title">Настройки трансляции</div>
           <StreamOptions />
           <small class="muted">Применяется сразу, без перезапуска трансляции.</small>

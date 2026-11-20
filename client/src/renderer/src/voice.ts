@@ -162,6 +162,10 @@ class VoiceClient {
         throw err;
       }
       p.onGateChange(() => this.syncParticipants());
+      // Tell the user when Echo had to bring the mic back by itself (so we learn what happens).
+      p.onRecover((reason) => {
+        if (this.room) this.set({ error: `Микрофон: ${reason}. Echo сам всё починил — говори дальше` });
+      });
       this.pipeline = p;
       return p;
     })().finally(() => (this.pipelineStarting = null));

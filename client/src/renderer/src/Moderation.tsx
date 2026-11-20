@@ -54,14 +54,6 @@ export function ModTools({
 }) {
   const [form, setForm] = useState<'mute' | 'rename' | 'ban' | 'grant' | null>(null);
   const [granted, setGranted] = useState<string[] | null>(null);
-  const [pioneer, setPioneer] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (me !== 'admin') return;
-    void window.echo
-      .listMembers()
-      .then((list) => setPioneer(list.find((m) => m.id === target.id)?.pioneer ?? false))
-      .catch(() => {});
-  }, [target.id]);
   useEffect(() => {
     if (form !== 'grant') return;
     void window.echo
@@ -131,27 +123,6 @@ export function ModTools({
           {admin && (
             <button class="mod-btn" disabled={busy} onClick={() => setForm('grant')}>
               Эксклюзив…
-            </button>
-          )}
-          {admin && pioneer !== null && (
-            <button
-              class={`mod-btn pioneer${pioneer ? ' on' : ''}`}
-              disabled={busy}
-              title="Открывает вкладку «Первооткрыватели» и стили для своих"
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await window.echo.moderate(target.id, 'pioneer', { on: !pioneer });
-                  setPioneer(!pioneer);
-                  onDone(pioneer ? `${target.nickname}: доступ к «Первооткрывателям» закрыт` : `${target.nickname} теперь первооткрыватель`);
-                } catch (e) {
-                  onError(e instanceof Error ? e.message : String(e));
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {pioneer ? '✓ Первооткрыватель' : 'Первооткрыватель'}
             </button>
           )}
           {admin &&
