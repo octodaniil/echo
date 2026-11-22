@@ -269,6 +269,9 @@ export function ProfileView({
               </div>
               {manage && profile.fullAchievements ? (
                 <AchievementsBoard profile={profile} setProfile={setProfile} isMe={false} manage reload={load} />
+              ) : isMe && (amAdmin || amModerator) && profile.fullAchievements ? (
+                // Staff see the whole catalog in their own profile (unearned secret ones stay hidden).
+                <AchievementsBoard profile={profile} setProfile={setProfile} isMe manage={false} reload={load} />
               ) : (
                 pinnedDefs.length === 0 && <p class="muted tiny">Пока ничего не закреплено.</p>
               )}

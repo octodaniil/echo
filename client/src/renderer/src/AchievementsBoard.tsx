@@ -30,8 +30,9 @@ export function AchievementsBoard({
 
   // Hidden achievements this person earned come with their real definition.
   const revealed = new Map((profile.revealed ?? []).map((d) => [d.code, d]));
-  const catalog = baseCatalog.map((d) => revealed.get(d.code) ?? d);
   const owned = new Map(profile.achievements.map((a) => [a.code, a.awardedAt]));
+  // Secret achievements nobody has earned here stay out of sight (except when granting).
+  const catalog = baseCatalog.map((d) => revealed.get(d.code) ?? d).filter((d) => manage || !d.hidden || owned.has(d.code));
   const pinned = profile.pinned ?? [];
 
   const sortInGroup = (list: AchievementDef[]) =>
