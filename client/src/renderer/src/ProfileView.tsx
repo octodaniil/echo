@@ -6,6 +6,7 @@ import { levelProgress, lookVars, RANK_NAMES } from './look';
 import { StatusLine } from './Status';
 import { GameCover } from './GameCover';
 import { hasFrame } from './Frames';
+import { RankEmblem } from './RankEmblem';
 import { Avatar, Nick } from './Avatar';
 import { bannerUrl } from './profile';
 import { CloseIcon } from './icons';
@@ -27,6 +28,7 @@ export function ProfileView({
   activity,
   onClose,
   onMessage,
+  onMyAchievements,
 }: {
   userId: string;
   meId: string;
@@ -38,11 +40,14 @@ export function ProfileView({
   onClose: () => void;
   /** Open a private chat with this person (not shown on your own profile). */
   onMessage?: () => void;
+  /** Own profile: open «Мои ачивки». */
+  onMyAchievements?: () => void;
 }) {
   const baseCatalog = useCatalog();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manage, setManage] = useState(false);
+  const [questMsg, setQuestMsg] = useState<string | null>(null);
   const isMe = userId === meId;
 
   const load = () =>
@@ -112,9 +117,27 @@ export function ProfileView({
                 <StatusLine status={profile.status} class="profile-status" />
                 <UniqueTitles uniques={profile.uniques} />
                 {onMessage && (
-                  <button class="primary small profile-message" onClick={onMessage}>
-                    Написать
-                  </button>
+                  <div class="profile-actions-row">
+                    <button class="primary small profile-message" onClick={onMessage}>
+                      Написать
+                    </button>
+                    <button
+                      class="secondary small"
+                      title="Совместное испытание на эту неделю: +40 очков обоим и рамка «Связка» за первый"
+                      onClick={async () => {
+                        try {
+                          await window.echo.startQuest(userId);
+                          setError(null);
+                          setQuestMsg('Квест начат — смотри в «Мои ачивки»');
+                        } catch (e) {
+                          setQuestMsg((e as Error).message);
+                        }
+                      }}
+                    >
+                      Квест на двоих
+                    </button>
+                    {questMsg && <span class="muted tiny">{questMsg}</span>}
+                  </div>
                 )}
                 <div class="profile-chips">
                   <span class="chip-static">в Echo с {new Date(profile.createdAt).toLocaleDateString('ru-RU')}</span>
@@ -135,18 +158,6 @@ export function ProfileView({
               )}
             </header>
 
-            {isMe && (
-              <section class="profile-section my-achievements">
-                <div class="profile-section-head">
-                  <h3>Мои ачивки</h3>
-                  <small class="muted">
-                    Нажми на полученную, чтобы показать её в профиле (до {MAX_PINNED}). Остальные видишь только ты.
-                  </small>
-                </div>
-                <AchievementsBoard profile={profile} setProfile={setProfile} isMe manage={false} reload={load} />
-              </section>
-            )}
-
             {p && (
               <div class="rank-card">
                 <div class="rank-level mono">
@@ -155,7 +166,10 @@ export function ProfileView({
                 </div>
                 <div class="rank-body">
                   <div class="rank-title">
-                    <span class="rank-name">{RANK_NAMES[p.tier]}</span>
+                    <span class="rank-name">
+                      <RankEmblem tier={p.tier} size={26} />
+                      {RANK_NAMES[p.tier]}
+                    </span>
                     <span class="muted mono">
                       {p.points} / {p.nextLevelAt ?? '—'} очков
                     </span>
@@ -167,9 +181,13 @@ export function ProfileView({
                   </div>
                   <div class="rank-track" style={{ '--done': `${(p.tier / (RANK_NAMES.length - 1)) * 100}%` }}>
                     {RANK_NAMES.map((name, i) => (
-                      <span key={name} class={`rank-node${i < p.tier ? ' done' : i === p.tier ? ' now' : ''}`}>
+                      <span
+                        key={name}
+                        class={`rank-node${i < p.tier ? ' done' : i === p.tier ? ' now' : ''}`}
+                        title={`${name} — с ${[1, 5, 10, 15, 20, 25, 30, 35, 40, 45][i]} уровня`}
+                      >
                         <b />
-                        {name}
+                        <span class="rank-node-name">{i === p.tier || i === p.tier + 1 ? name : ''}</span>
                       </span>
                     ))}
                   </div>
@@ -230,12 +248,20 @@ export function ProfileView({
               </section>
             )}
 
-            {!isMe && (
             <section class="profile-section">
               <div class="profile-section-head">
                 <h3>Ачивки</h3>
-                {!manage && <small class="muted">Видны только ачивки, которые {profile.nickname} закрепил в профиле</small>}
-                {(amAdmin || (amModerator && !profile.isAdmin)) && (
+                {isMe ? (
+                  <small class="muted">Другие видят только те, что ты выставил в профиль (они вверху, рядом с ником)</small>
+                ) : (
+                  !manage && <small class="muted">Видны только ачивки, которые {profile.nickname} выставил в профиль</small>
+                )}
+                {isMe && onMyAchievements && (
+                  <button class="secondary small" onClick={onMyAchievements}>
+                    Мои ачивки
+                  </button>
+                )}
+                {!isMe && (amAdmin || (amModerator && !profile.isAdmin)) && (
                   <button class={`secondary small${manage ? ' active' : ''}`} onClick={() => setManage(!manage)}>
                     {manage ? 'Готово' : 'Выдать / забрать'}
                   </button>
@@ -248,7 +274,6 @@ export function ProfileView({
               )}
               {error && <div class="error">{error}</div>}
             </section>
-            )}
           </>
         )}
       </div>

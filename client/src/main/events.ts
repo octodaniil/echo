@@ -16,6 +16,12 @@ export interface EventHandlers {
   onBanned(message: string | null): void;
   /** A moderator did something to us (mute, disconnect, rename…). */
   onModeration(payload: unknown): void;
+  /** Evening games changed (bets, predictions, capsules). */
+  onFun(payload: unknown): void;
+  /** A weekly challenge or duo quest was completed. */
+  onWeekly(payload: unknown): void;
+  /** We went AFK (an hour of silence) or came back. */
+  onAfk(on: boolean): void;
   /** Chat: new / edited / deleted message, or someone typing. */
   onChat(event: string, payload: unknown): void;
 }
@@ -78,6 +84,9 @@ export function startEvents(session: ActiveSession, handlers: EventHandlers): ()
               handlers.onMove(m.channelId, m.by);
             }
             else if (event === 'moderation') handlers.onModeration(JSON.parse(data));
+            else if (event === 'weekly') handlers.onWeekly(JSON.parse(data));
+            else if (event === 'fun') handlers.onFun(JSON.parse(data));
+            else if (event === 'afk') handlers.onAfk((JSON.parse(data) as { on: boolean }).on);
             else if (event === 'chat' || event === 'typing') handlers.onChat(event, JSON.parse(data));
             else if (event === 'banned') {
               handlers.onBanned((JSON.parse(data) as { message: string }).message);

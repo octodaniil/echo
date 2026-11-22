@@ -469,3 +469,646 @@
   color: #04261a;
   background: linear-gradient(90deg, #8ff5cf, #5fe3b0);
 }
+
+/* state on top of colorful nameplates: dark backing so mute / level / status always read */
+.member:not(.plate-none) .member-muted {
+  box-sizing: content-box;
+  padding: 3px;
+  border-radius: 50%;
+  color: #ff6b81;
+  background: rgba(3, 5, 10, 0.82);
+  box-shadow: 0 0 0 1px rgba(255, 77, 109, 0.7);
+}
+.member:not(.plate-none) .member-muted.by-mod {
+  color: #ffcf7a;
+  box-shadow: 0 0 0 1px rgba(255, 181, 71, 0.8);
+}
+.member:not(.plate-none) .lvl {
+  background: rgba(3, 5, 10, 0.8);
+}
+.member:not(.plate-none) .member-game {
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 6px rgba(0, 0, 0, 0.85);
+}
+.member:not(.plate-none) .live-badge {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.member:not(.plate-none) .mod-flag {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+/* AFK tag (an hour of silence) */
+.afk-tag {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 1px 5px;
+  color: #c9d4e0;
+  background: rgba(3, 5, 10, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(201, 212, 224, 0.4);
+}
+/* ten rank nodes: names only under the current and next rank */
+.rank-node-name:empty {
+  display: none;
+}
+.rank-node {
+  min-width: 12px;
+}
+
+
+/* ---------- levels 25–50 ---------- */
+.fx-anim .fx-wave {
+  transform-origin: 100px 100px;
+  animation: fx-wave 2.6s ease-out infinite;
+}
+.fx-anim .fx-wave.fx-wave2 {
+  animation-delay: -1.3s;
+}
+@keyframes fx-wave {
+  from {
+    transform: scale(0.72);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+}
+.fx-anim .fx-zap {
+  animation: fx-zap 0.18s steps(2) infinite;
+}
+@keyframes fx-zap {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.member.plate-field,
+.member.plate-nova,
+.member.plate-singularity {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  color: #fff;
+}
+.member.plate-field > *,
+.member.plate-nova > *,
+.member.plate-singularity > * {
+  position: relative;
+  z-index: 2;
+}
+.member.plate-field {
+  background:
+    radial-gradient(ellipse 54px 14px at 88% 50%, transparent 60%, rgba(143, 227, 255, 0.5) 62%, transparent 66%),
+    radial-gradient(ellipse 84px 24px at 88% 50%, transparent 60%, rgba(143, 227, 255, 0.35) 62%, transparent 65%),
+    radial-gradient(ellipse 120px 34px at 88% 50%, transparent 60%, rgba(143, 227, 255, 0.22) 62%, transparent 64%),
+    radial-gradient(100px 60px at 88% 50%, rgba(80, 170, 255, 0.35), transparent 70%),
+    linear-gradient(90deg, #03122a, #020814 75%);
+  box-shadow:
+    inset 0 0 0 1px rgba(90, 180, 255, 0.55),
+    inset 3px 0 0 #5ab4ff;
+}
+.member.plate-field::after {
+  content: '';
+  position: absolute;
+  right: -10px;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 110px;
+  background: linear-gradient(100deg, transparent 40%, rgba(214, 246, 255, 0.6) 50%, transparent 60%);
+  mix-blend-mode: screen;
+  animation: plate-zap 1.8s steps(6) infinite;
+  pointer-events: none;
+}
+@keyframes plate-zap {
+  0%,
+  20%,
+  100% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+}
+.member.plate-nova {
+  background:
+    radial-gradient(56px 36px at 90% 50%, #fff 0, #ffd36b 20%, rgba(255, 110, 40, 0.6) 45%, transparent 70%),
+    linear-gradient(90deg, #1c0904, #0b0405 70%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 170, 80, 0.6),
+    inset 3px 0 0 #ff8a3d;
+}
+.member.plate-nova::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: repeating-radial-gradient(circle at 90% 50%, transparent 0 14px, rgba(255, 190, 120, 0.35) 15px 16px, transparent 17px 30px);
+  animation: plate-shock 2.4s linear infinite;
+  pointer-events: none;
+}
+@keyframes plate-shock {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.35;
+  }
+}
+.member.plate-singularity {
+  background:
+    radial-gradient(30px 18px at 86% 50%, #000 0 55%, transparent 58%),
+    radial-gradient(110px 46px at 86% 50%, rgba(255, 214, 120, 0.55), rgba(180, 140, 255, 0.4) 40%, transparent 70%),
+    linear-gradient(90deg, #08040f, #130a24 60%, #05030a);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 214, 120, 0.7),
+    inset 3px 0 0 #ffd678,
+    inset 0 0 24px rgba(180, 140, 255, 0.25);
+}
+.member.plate-singularity::before {
+  content: 'LEVEL 50 // SINGULARITY';
+  position: absolute;
+  right: 52px;
+  top: 3px;
+  z-index: 1;
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 0.3em;
+  color: rgba(255, 214, 120, 0.5);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.member.plate-singularity::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 240, 200, 0.3) 50%, transparent 70%);
+  background-size: 260% 100%;
+  animation: plate-sheen 6s linear infinite;
+  pointer-events: none;
+}
+
+.nfx-plasma,
+.nfx-singularity {
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+}
+.nfx-plasma {
+  background-image: linear-gradient(90deg, #ff3cac, #784ba0, #2b86c5, #21d4fd, #ff3cac);
+  background-size: 300% 100%;
+  animation: nfx-flow 4s linear infinite;
+  filter: drop-shadow(0 0 5px rgba(255, 60, 172, 0.5));
+}
+.nfx-singularity {
+  position: relative;
+  background-image: linear-gradient(90deg, #fff1b8, #ffd678 30%, #fff 50%, #b48cff 70%, #fff1b8);
+  background-size: 200% 100%;
+  animation: nfx-flow 3s linear infinite;
+  filter: drop-shadow(0 0 0.6px #000) drop-shadow(0 0 6px rgba(255, 214, 120, 0.8)) drop-shadow(0 0 14px rgba(180, 140, 255, 0.45));
+}
+@keyframes nfx-flow {
+  to {
+    background-position: 300% 0;
+  }
+}
+
+/* rank emblems next to levels */
+.rank-emblem {
+  flex-shrink: 0;
+  overflow: visible;
+}
+.lvl {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 2px;
+}
+.rank-name,
+.hovercard-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* ---------- nameplates for levels 15 / 25 / 35 ---------- */
+.member.plate-filament,
+.member.plate-beam,
+.member.plate-wind {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  color: #fff;
+}
+.member.plate-filament > *,
+.member.plate-beam > *,
+.member.plate-wind > * {
+  position: relative;
+  z-index: 2;
+}
+/* 15 — plasma filament: a glowing magenta thread across the row */
+.member.plate-filament {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='40'%3E%3Cpath d='M0 22 C20 8 40 34 60 20 S100 6 120 22 S150 32 160 18' fill='none' stroke='%23ff5c9a' stroke-width='2' stroke-opacity='.75'/%3E%3Cpath d='M0 24 C22 12 38 30 62 22 S98 10 122 24 S152 30 160 20' fill='none' stroke='%23ffd1e6' stroke-width='.8' stroke-opacity='.6'/%3E%3C/svg%3E")
+      left center / 160px 100% repeat-x,
+    linear-gradient(90deg, rgba(60, 8, 32, 0.95), rgba(18, 4, 14, 0.95) 70%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 92, 154, 0.45),
+    inset 2px 0 0 #ff5c9a;
+}
+.member.plate-filament::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(90deg, transparent, rgba(255, 92, 154, 0.25), transparent);
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  animation: plate-run 3.2s linear infinite;
+  pointer-events: none;
+}
+@keyframes plate-run {
+  from {
+    background-position: -50% 0;
+  }
+  to {
+    background-position: 150% 0;
+  }
+}
+/* 25 — pulsar beam: a light beam sweeps across now and then */
+.member.plate-beam {
+  background:
+    radial-gradient(10px 10px at 90% 50%, #fff, rgba(143, 227, 255, 0.6) 40%, transparent 70%),
+    radial-gradient(80px 28px at 90% 50%, rgba(143, 227, 255, 0.3), transparent 70%),
+    linear-gradient(90deg, #031624, #020a12 75%);
+  box-shadow:
+    inset 0 0 0 1px rgba(143, 227, 255, 0.45),
+    inset 2px 0 0 #8fe3ff;
+}
+.member.plate-beam::after {
+  content: '';
+  position: absolute;
+  inset: -40% 0;
+  z-index: 1;
+  background: conic-gradient(from 250deg at 90% 50%, transparent 0 20deg, rgba(214, 246, 255, 0.55) 26deg, transparent 32deg);
+  animation: plate-beam 2.4s linear infinite;
+  pointer-events: none;
+}
+@keyframes plate-beam {
+  0%,
+  60%,
+  100% {
+    opacity: 0;
+  }
+  70%,
+  80% {
+    opacity: 1;
+  }
+}
+/* 35 — stellar wind: streaks of hot particles flowing past */
+.member.plate-wind {
+  background:
+    repeating-linear-gradient(100deg, transparent 0 22px, rgba(255, 176, 46, 0.32) 22px 24px, transparent 24px 46px),
+    repeating-linear-gradient(100deg, transparent 0 34px, rgba(255, 92, 154, 0.25) 34px 35px, transparent 35px 70px),
+    linear-gradient(90deg, rgba(48, 16, 4, 0.95), rgba(20, 6, 10, 0.95) 75%);
+  background-size: 200% 100%, 200% 100%, auto;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 176, 46, 0.45),
+    inset 2px 0 0 #ffb02e;
+  animation: plate-wind 5s linear infinite;
+}
+@keyframes plate-wind {
+  to {
+    background-position: -100% 0, -60% 0, 0 0;
+  }
+}
+
+
+/* ---------- weekly: challenges, quests, recap, crowns ---------- */
+.weekly {
+  margin-bottom: 8px;
+}
+.weekly-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.weekly-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(14, 22, 36, 0.9);
+  box-shadow: inset 0 0 0 1px var(--line);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+.weekly-item.done {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--speaking) 60%, transparent);
+  background: linear-gradient(90deg, rgba(57, 255, 156, 0.1), rgba(14, 22, 36, 0.9) 70%);
+}
+.weekly-item.duo {
+  box-shadow: inset 0 0 0 1px rgba(255, 122, 184, 0.35);
+}
+.weekly-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.profile-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0 2px;
+}
+.profile-actions-row .profile-message {
+  margin: 0;
+}
+.crown-tag {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 15px;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+.crown-tag.talk {
+  color: #ffd678;
+}
+.crown-tag.stream {
+  color: #ff5c9a;
+}
+.recap-modal {
+  width: min(780px, calc(100vw - 48px));
+  max-height: calc(100vh - 90px);
+}
+.recap-modal .modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.recap-modal .modal-header h2 {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.recap-modal .modal-header .icon-btn {
+  margin-left: auto;
+}
+.recap-modal .segmented button.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.recap-body {
+  overflow-y: auto;
+  padding: 0 22px 22px;
+}
+.recap-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.heatmap {
+  display: grid;
+  grid-template-columns: 26px repeat(24, 1fr);
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.heat-hour,
+.heat-day {
+  font-size: 9px;
+  color: var(--muted);
+  text-align: center;
+}
+.heat-day {
+  text-align: left;
+  line-height: 14px;
+}
+.heat-cell {
+  height: 14px;
+  background: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.recap-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.recap-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+}
+.recap-row b {
+  flex: 1;
+}
+.recap-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* entry sound items: a speaker; locked ones are still clickable to preview */
+.sound-swatch {
+  color: var(--accent);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 50%, transparent));
+}
+.cosmetic.locked .sound-swatch {
+  color: var(--muted);
+  filter: none;
+}
+
+
+/* ---------- «Вечер»: bets, predictions, capsules ---------- */
+.fun-modal {
+  width: min(820px, calc(100vw - 48px));
+  max-height: calc(100vh - 90px);
+}
+.fun-modal .modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.fun-modal .modal-header h2 {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.fun-modal .segmented button.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.wallet {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #ffd678;
+  font-weight: 700;
+}
+.spark-icon {
+  color: #ffd678;
+  vertical-align: -2px;
+  filter: drop-shadow(0 0 4px rgba(255, 214, 120, 0.6));
+}
+.fun-body {
+  overflow-y: auto;
+  padding: 0 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fun-create {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(14, 22, 36, 0.9);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.fun-create textarea {
+  resize: vertical;
+}
+.fun-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.fun-options .input {
+  flex: 1 1 160px;
+  width: auto;
+}
+.bet,
+.predict,
+.capsule {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: rgba(14, 22, 36, 0.9);
+  box-shadow: inset 0 0 0 1px var(--line);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+.bet.closed,
+.capsule:not(.opened) {
+  opacity: 0.8;
+}
+.bet-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bet-pot {
+  margin-left: auto;
+  color: #ffd678;
+}
+.bet-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  min-height: 34px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.bet-option.mine {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.bet-option.won {
+  box-shadow: inset 0 0 0 1px rgba(255, 214, 120, 0.8);
+}
+.bet-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+}
+.bet-option.won .bet-bar {
+  background: rgba(255, 214, 120, 0.16);
+}
+.bet-title {
+  font-weight: 600;
+  position: relative;
+}
+.bet-people {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+}
+.bet-option > .mono,
+.bet-option > button {
+  position: relative;
+}
+.bet-stake {
+  position: relative;
+  display: inline-flex;
+  gap: 6px;
+}
+.bet-stake .input {
+  width: 74px;
+  padding: 4px 6px;
+}
+.bet-actions {
+  display: flex;
+  gap: 8px;
+}
+.predict-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.predict-pick {
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+  cursor: pointer;
+}
+.predict-pick.active {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.predict-pick:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.capsule-text {
+  white-space: pre-wrap;
+  margin: 0;
+}
+.fun-create textarea {
+  font: inherit;
+  color: var(--text);
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  background: rgba(80, 220, 255, 0.05);
+  box-shadow: inset 0 0 0 1px var(--line);
+  user-select: text;
+}
+.fun-create textarea:focus {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.predict .bet-head b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.predict .crown-tag {
+  filter: none;
+}

@@ -7,6 +7,7 @@ import { Banned, ServerDown } from './ServerDown';
 import { Main } from './Shell';
 import { TooltipLayer } from './Tooltip';
 import { FrameDefs } from './Frames';
+import { RankDefs } from './RankEmblem';
 import { voice } from './voice';
 
 const endNotice: Record<SessionEndReason, string | null> = {
@@ -100,6 +101,7 @@ export function App() {
       <Main session={session} channels={channels} presence={presence} online={online} onSession={setSession} />
       <TooltipLayer />
       <FrameDefs />
+      <RankDefs />
       {banned ? <Banned message={banned} /> : serverDown && <ServerDown serverUrl={session.serverUrl} />}
     </>
   );

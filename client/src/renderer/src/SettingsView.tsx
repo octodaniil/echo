@@ -35,6 +35,7 @@ export function SettingsView({
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const admin = session.user.isAdmin;
+  const staff = session.user.isAdmin || !!session.user.isModerator;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -70,7 +71,7 @@ export function SettingsView({
           <i class="nav-num">06</i>
           Приложение
         </NavItem>
-        {admin && (
+        {staff && (
           <>
             <div class="settings-nav-title admin-title">Администрирование</div>
             <NavItem active={tab === 'pioneers'} onClick={() => setTab('pioneers')}>
@@ -84,7 +85,7 @@ export function SettingsView({
         {tab === 'voice' && <VoiceTab />}
         {tab === 'account' && <AccountTab session={session} onSession={onSession} />}
         {tab === 'style' && <StyleTab session={session} />}
-        {tab === 'pioneers' && admin && <PioneersTab session={session} />}
+        {tab === 'pioneers' && staff && <PioneersTab session={session} />}
         {tab === 'hotkeys' && <HotkeysTab />}
         {tab === 'games' && <GamesTab />}
         {tab === 'app' && <AppTab session={session} />}
@@ -288,6 +289,23 @@ function VoiceTab() {
           </Field>
         </div>
       )}
+
+      <h3>Качество голоса</h3>
+      <div class="radio-cards three">
+        {(
+          [
+            ['standard', 'Обычное', '48 кбит/с — для слабого интернета'],
+            ['high', 'Высокое', '64 кбит/с — как в Discord по умолчанию'],
+            ['studio', 'Студийное', '128 кбит/с — максимум деталей голоса'],
+          ] as const
+        ).map(([id, title, hint]) => (
+          <label key={id} class={`radio-card${s.voiceQuality === id ? ' checked' : ''}`}>
+            <input type="radio" name="voiceq" checked={s.voiceQuality === id} onChange={() => settings.update({ voiceQuality: id })} />
+            <span class="radio-title">{title}</span>
+            <span class="radio-hint">{hint}</span>
+          </label>
+        ))}
+      </div>
 
       <h3>Обработка голоса</h3>
       <label class="switch-row">

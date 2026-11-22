@@ -100,6 +100,15 @@ function beginSession(s: ActiveSession) {
     onModeration(payload) {
       send('moderation', payload);
     },
+    onAfk(on) {
+      send('afk', on);
+    },
+    onWeekly(payload) {
+      send('weekly', payload);
+    },
+    onFun(payload) {
+      send('fun', payload);
+    },
     onChat(event, payload) {
       send(event === 'typing' ? 'chat-typing' : 'chat', payload);
     },
@@ -274,6 +283,26 @@ function registerIpc() {
   );
 
   handle('banned:get', () => banned);
+  handle('weekly:get', () => authed(requireSession(), '/api/weekly'));
+  handle('fun:get', () => authed(requireSession(), '/api/fun'));
+  handle('bets:create', (question: string, options: string[]) =>
+    authed(requireSession(), '/api/bets', { method: 'POST', body: { question, options } }),
+  );
+  handle('bets:stake', (id: number, option: number, amount: number) =>
+    authed(requireSession(), `/api/bets/${Number(id)}/stake`, { method: 'POST', body: { option, amount } }),
+  );
+  handle('bets:settle', (id: number, action: string, winner?: number) =>
+    authed(requireSession(), `/api/bets/${Number(id)}/settle`, { method: 'POST', body: { action, winner } }),
+  );
+  handle('predict', (kind: string, pick: string) => authed(requireSession(), '/api/predictions', { method: 'POST', body: { kind, pick } }));
+  handle('capsules:seal', (text: string, target: string, openAt: number) =>
+    authed(requireSession(), '/api/capsules', { method: 'POST', body: { text, target, openAt } }),
+  );
+  handle('quests:start', (friendId: string) => authed(requireSession(), '/api/quests', { method: 'POST', body: { friendId } }));
+  handle('recap:get', async (which: string) =>
+    (await authed<{ recap: unknown }>(requireSession(), `/api/recap?week=${which === 'current' ? 'current' : 'last'}`)).recap,
+  );
+  handle('voice:activity', () => authed(requireSession(), '/api/me/voice-activity', { method: 'POST', body: {} }));
   // ---------- chat ----------
   const conv = (c: string) => encodeURIComponent(c);
   handle('chat:history', (c: string, before?: number) =>

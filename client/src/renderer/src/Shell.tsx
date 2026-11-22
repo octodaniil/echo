@@ -3,10 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { AchievementDef, Activity, Channel, Look, Member, ModerationEvent, PresenceUser, Prestige, Session, UserStatus } from '../../shared/types';
 import { Badge, LevelChip, PinnedBadges, reloadCatalog, UniqueTitles } from './Achievements';
 import { hasFrame } from './Frames';
+import { RankEmblem } from './RankEmblem';
 import { lookVars, rankName } from './look';
 import { StatusLine, StatusMenu, useMyStatus } from './Status';
 import { canModerate, MembersView, ModTools, RoleTag, type Role } from './Moderation';
 import { ChatPanel, type ChatPerson } from './ChatPanel';
+import { MyAchievementsView } from './MyAchievements';
+import { Crowns, RecapView } from './Weekly';
+import { FunView } from './Fun';
 import { chat, dmConv, useChat } from './chatStore';
 import { coverUrl, GameCover } from './GameCover';
 import { Avatar, Nick } from './Avatar';
@@ -35,7 +39,7 @@ import { bannerUrl, useSettings } from './profile';
 import { ProfileView } from './ProfileView';
 import { ScreenPicker } from './ScreenPicker';
 import { SettingsView } from './SettingsView';
-import { play } from './sounds';
+import { play, setEntryResolver } from './sounds';
 import { StreamOptions } from './StreamOptions';
 import { voice, type ConnectionStats, type OutboundStats, type VoiceState } from './voice';
 
@@ -70,6 +74,7 @@ interface ProfileLite {
   style?: Look;
   status?: UserStatus;
   muted?: boolean;
+  crowns?: string[];
 }
 
 /** A person shown in the UI: server profile merged with live voice data when we share a channel. */
@@ -97,6 +102,8 @@ interface Person {
   connecting?: boolean;
   /** Voice-muted by a moderator. */
   muted?: boolean;
+  afk?: boolean;
+  crowns?: string[];
 }
 
 interface VolumeMenu {
@@ -131,12 +138,58 @@ export function Main({
   const myRole: Role = session.user.isAdmin ? 'admin' : session.user.isModerator ? 'moderator' : null;
   const isStaff = myRole !== null;
   const [showMembers, setShowMembers] = useState(false);
+  const [showMyAch, setShowMyAch] = useState(false);
+  const [recap, setRecap] = useState<'last' | 'current' | null>(null);
+  const [showFun, setShowFun] = useState(false);
+  useEffect(
+    () =>
+      window.echo.onFun((e) => {
+        if (e.type === 'bet-won') showToast(`Ты выиграл спор «${e.question}»: +${e.amount} искр`, 7000);
+        else if (e.type === 'predicted')
+          showToast(`Прогноз сбылся — ${e.kind === 'talk' ? 'король болтовни' : 'звезда эфира'} угадан: +${e.amount} искр`, 7000);
+        else if (e.type === 'capsule') {
+          showToast(`📬 Открылась твоя капсула времени от ${new Date(e.createdAt).toLocaleDateString('ru-RU')}`, 9000);
+          setShowFun(true);
+        }
+      }),
+    [],
+  );
+  // Monday: show last week's recap once (if there was anything that week).
+  useEffect(() => {
+    const t = window.setTimeout(async () => {
+      const r = await window.echo.getRecap('last').catch(() => null);
+      if (!r || r.empty) return;
+      let seen: string | null = null;
+      try {
+        seen = localStorage.getItem('echo.recapSeen');
+      } catch {
+        // storage unavailable: just show it
+      }
+      if (seen === r.week) return;
+      try {
+        localStorage.setItem('echo.recapSeen', r.week);
+      } catch {
+        // ignore
+      }
+      setRecap('last');
+    }, 4000);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(
+    () =>
+      window.echo.onWeekly((e) => {
+        if (e.type === 'challenge') showToast(`Испытание недели выполнено: ${e.title} · +25 очков`, 6000);
+        else showToast(`Квест на двоих с ${nameOfRef.current(e.with ?? '')} выполнен · +40 очков обоим`, 6000);
+      }),
+    [],
+  );
   /** Open text conversation ("ch:<id>" or "dm:<a>|<b>"), shown next to the call or alone. */
   const [chatConv, setChatConv] = useState<string | null>(null);
   const store = useChat();
   // Everyone ever registered (for names/avatars of people who are offline, e.g. in private chats).
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const askedFor = useRef(new Set<string>());
+  const nameOfRef = useRef<(id: string) => string>(() => 'друг');
   useEffect(() => {
     const load = () => void window.echo.listMembers().then(setAllMembers).catch(() => {});
     load();
@@ -166,6 +219,7 @@ export function Main({
           style: m.style,
           status: m.status,
           muted: m.muted,
+          crowns: m.crowns,
         });
     // Presence is the freshest source (also covers people who are online but not in voice).
     for (const u of presence)
@@ -181,6 +235,7 @@ export function Main({
         style: u.style,
         status: u.status,
         muted: u.muted,
+        crowns: u.crowns,
       });
     map.set(me.id, { ...map.get(me.id), nickname: me.nickname, avatar: me.avatar ?? null });
     return map;
@@ -218,6 +273,8 @@ export function Main({
     };
   };
   chat.nameOf = nameOf;
+  setEntryResolver((id) => profiles.get(id)?.style?.sound);
+  nameOfRef.current = nameOf;
   chat.dnd = myProfile?.status?.state === 'dnd';
   chat.onOpenRequest = (conv) => setChatConv(conv);
   const openDm = (userId: string) => {
@@ -288,6 +345,20 @@ export function Main({
     [],
   );
 
+  // An hour of silence: AFK (voice time stops) — and back.
+  useEffect(
+    () =>
+      window.echo.onAfk((on) =>
+        showToast(
+          on
+            ? 'Ты в АФК: больше часа тишины, время в голосе не идёт. Скажи что-нибудь, чтобы вернуться'
+            : 'С возвращением — время в голосе снова идёт',
+          on ? 9000 : 3500,
+        ),
+      ),
+    [],
+  );
+
   // Something a moderator did to us.
   useEffect(
     () =>
@@ -349,6 +420,8 @@ export function Main({
           style: prof?.style ?? server?.style,
           status: prof?.status ?? server?.status,
           muted: prof?.muted ?? server?.muted,
+          afk: server?.afk,
+          crowns: prof?.crowns ?? server?.crowns,
           streaming: p.streaming || (server?.streaming ?? false),
           joinedAt: server?.joinedAt || p.joinedAt,
         };
@@ -407,6 +480,8 @@ export function Main({
         style: profiles.get(m.id)?.style ?? m.style,
         status: profiles.get(m.id)?.status ?? m.status,
         muted: profiles.get(m.id)?.muted ?? m.muted,
+        afk: m.afk,
+        crowns: profiles.get(m.id)?.crowns ?? m.crowns,
         connecting: m.id === me.id && v.status !== 'connected' && v.channelId === c.id,
       })),
       ...self,
@@ -510,6 +585,18 @@ export function Main({
             onProfile={() => {
               setStatusMenu(false);
               setProfileId(me.id);
+            }}
+            onAchievements={() => {
+              setStatusMenu(false);
+              setShowMyAch(true);
+            }}
+            onRecap={() => {
+              setStatusMenu(false);
+              setRecap('last');
+            }}
+            onFun={() => {
+              setStatusMenu(false);
+              setShowFun(true);
             }}
             onClose={() => setStatusMenu(false)}
             onError={(m) => showToast(m)}
@@ -629,6 +716,16 @@ export function Main({
           onToast={(m) => showToast(m)}
         />
       )}
+      {showMyAch && <MyAchievementsView meId={me.id} nameOf={nameOf} onClose={() => setShowMyAch(false)} />}
+      {recap && <RecapView which={recap} onClose={() => setRecap(null)} />}
+      {showFun && (
+        <FunView
+          meId={me.id}
+          people={allMembers.filter((m) => !m.banned).map((m) => ({ id: m.id, nickname: m.nickname }))}
+          channels={channels.map((c) => ({ conv: `ch:${c.id}`, name: c.name }))}
+          onClose={() => setShowFun(false)}
+        />
+      )}
       {showMembers && (
         <MembersView
           me={me.id}
@@ -649,6 +746,10 @@ export function Main({
           activity={profiles.get(profileId)?.activity ?? null}
           onClose={() => setProfileId(null)}
           onMessage={profileId !== me.id ? () => openDm(profileId) : undefined}
+          onMyAchievements={() => {
+            setProfileId(null);
+            setShowMyAch(true);
+          }}
         />
       )}
       {showSettings && <SettingsView session={session} onSession={onSession} onClose={() => setShowSettings(false)} />}
@@ -885,6 +986,8 @@ function ChannelList({
                       <span class="member-name">
                         <Nick name={p.nickname} look={p.style} />
                         <RoleTag role={p.role} />
+                        <Crowns crowns={p.crowns} />
+                        {p.afk && <span class="afk-tag" title="Молчит больше часа — время в голосе не идёт">АФК</span>}
                         <LevelChip prestige={p.prestige} look={p.style} />
                       </span>
                       {p.connecting ? (
@@ -1039,6 +1142,7 @@ function OnlineList({
                 <span class="member-name">
                   <Nick name={u.nickname} look={u.style} />
                   <RoleTag role={u.role} />
+                  <Crowns crowns={u.crowns} />
                   <LevelChip prestige={u.prestige} look={u.style} />
                 </span>
                 {u.activity ? (
@@ -1224,6 +1328,8 @@ function VoiceStage({
               <div class="tile-name">
                 <Nick name={p.nickname} look={p.style} />
                 <RoleTag role={p.role} />
+                <Crowns crowns={p.crowns} />
+                {p.afk && <span class="afk-tag">АФК</span>}
                 {p.isLocal && <span class="muted"> (ты)</span>}
                 {p.micMuted && <MicOffIcon size={14} class="member-muted" />}
               </div>
@@ -1767,12 +1873,14 @@ function HoverCard({ info }: { info: HoverInfo }) {
         <div class="hovercard-name">
           <Nick name={p.nickname} look={p.style} />
           <RoleTag role={p.role} />
+          <Crowns crowns={p.crowns} />
           {p.isLocal && <span class="muted"> (ты)</span>}
         </div>
         <UniqueTitles uniques={p.uniques} />
         {p.role && <span class={`role-chip ${p.role}`}>{p.role === 'admin' ? 'Админ' : 'Модератор'}</span>}
         {p.prestige && (
           <div class="hovercard-rank">
+            <RankEmblem tier={p.prestige.tier} size={16} />
             {rankName(p.prestige)} · уровень {p.prestige.level}
           </div>
         )}

@@ -1,7 +1,18 @@
 import type { Look, Prestige } from '../../shared/types';
 
-/** Ranks by level (server: 1–4, 5–8, 9–12, 13–16, 17+). */
-export const RANK_NAMES = ['Сигнал', 'Резонанс', 'Импульс', 'Квазар', 'Сингулярность'];
+/** Ten ranks, one per five levels (1, 5, 10 … 45). */
+export const RANK_NAMES = [
+  'Сигнал',
+  'Резонанс',
+  'Импульс',
+  'Плазма',
+  'Квазар',
+  'Пульсар',
+  'Магнетар',
+  'Сверхновая',
+  'Гиперновая',
+  'Сингулярность',
+];
 
 export const rankName = (p: Prestige | undefined) => RANK_NAMES[p?.tier ?? 0] ?? RANK_NAMES[0]!;
 
@@ -31,7 +42,7 @@ export const RINGS: Record<string, { c: string; bg?: string }> = {
   prism: { c: '#ffe08a', bg: 'var(--holo)' },
 };
 
-export const DEFAULT_LOOK: Look = { ring: 'accent', frame: 'none', name: 'none', plate: 'none' };
+export const DEFAULT_LOOK: Look = { ring: 'accent', frame: 'none', name: 'none', plate: 'none', sound: 'default' };
 
 export function ringOf(look: Look | undefined) {
   const r = RINGS[look?.ring ?? 'accent'] ?? RINGS.accent!;

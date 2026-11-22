@@ -1,3 +1,4 @@
+import { playEntry } from './sounds';
 import { useEffect, useState } from 'preact/hooks';
 import type { Cosmetic, CosmeticsCatalog, CosmeticSlot, Look, Profile, Session } from '../../shared/types';
 import { useCatalog } from './Achievements';
@@ -131,9 +132,12 @@ export function StyleTab({ session }: { session: Session }) {
                   <button
                     key={c.id}
                     class={`cosmetic${active ? ' active' : ''}${c.unlocked ? '' : ' locked'}${c.group === 'exclusive' ? ' exclusive' : ''}`}
-                    disabled={!c.unlocked}
+                    disabled={!c.unlocked && slot.id !== 'sound'}
                     title={c.unlocked ? c.title : `${c.title} — ${requirement(c)}`}
-                    onClick={() => void equip(slot.id, c.id)}
+                    onClick={() => {
+                      if (slot.id === 'sound') void playEntry(c.id, true);
+                      if (c.unlocked) void equip(slot.id, c.id);
+                    }}
                   >
                     <span class={`cosmetic-preview${slot.id === 'frame' ? ' frame-preview' : ''}`} style={lookVars(preview)}>
                       {slot.id === 'ring' && (
@@ -152,6 +156,12 @@ export function StyleTab({ session }: { session: Session }) {
                       )}
                       {slot.id === 'name' && <Nick name={me.nickname} look={preview} class="cosmetic-nick" />}
                       {slot.id === 'plate' && <span class={`plate-swatch member plate-${c.id}`} />}
+                      {slot.id === 'sound' && (
+                        <svg class="sound-swatch" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+                          <path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" />
+                        </svg>
+                      )}
                     </span>
                     <span class="cosmetic-title">{c.title}</span>
                     {(!c.unlocked || c.group === 'exclusive') && (

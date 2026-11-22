@@ -1560,3 +1560,37 @@ input[type='range']::-webkit-slider-thumb {
 .profile-section.my-achievements {
   margin-top: 18px;
 }
+
+/* «Мои ачивки» window */
+.my-ach-modal {
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - 90px);
+}
+.my-ach-modal .modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.my-ach-modal .modal-header h2 {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.my-ach-modal .modal-header .icon-btn {
+  margin-left: auto;
+}
+.my-ach-body {
+  overflow-y: auto;
+  padding: 0 22px 22px;
+}
+
+/* three choices in a row (voice quality) */
+.radio-cards.three {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.radio-cards.three .radio-card {
+  grid-template-columns: auto 1fr;
+}

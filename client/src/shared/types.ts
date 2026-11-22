@@ -41,7 +41,7 @@ export interface Prestige {
   tierFloor: number;
 }
 
-export type CosmeticSlot = 'ring' | 'frame' | 'name' | 'plate';
+export type CosmeticSlot = 'ring' | 'frame' | 'name' | 'plate' | 'sound';
 
 /** Equipped cosmetics (ids rendered by the client). */
 export interface Look {
@@ -49,6 +49,8 @@ export interface Look {
   frame: string;
   name: string;
   plate: string;
+  /** Entry sound others hear when you join voice. */
+  sound?: string;
 }
 
 export interface Cosmetic {
@@ -93,6 +95,7 @@ export interface PresenceUser {
   status?: UserStatus;
   /** Voice-muted by a moderator. */
   muted?: boolean;
+  crowns?: string[];
 }
 
 export type UpdateStatus =
@@ -147,6 +150,10 @@ export interface ChannelMember {
   style?: Look;
   status?: UserStatus;
   muted?: boolean;
+  /** Silent for an hour: voice time doesn't count until they speak. */
+  afk?: boolean;
+  /** Crowns of the evening: 'talk' (talked the most), 'stream' (streamed the most). */
+  crowns?: string[];
   streaming: boolean;
   joinedAt: number;
 }
@@ -246,6 +253,67 @@ export interface ChatStorage {
   attachments: number;
   cap: number;
   messages: number;
+}
+
+export interface WeeklyState {
+  challenges: {
+    week: string;
+    endsAt: number;
+    items: { code: string; title: string; target: number; value: number; unit: string; done: boolean }[];
+    totalDone: number;
+  };
+  quests: { id: number; with: string; title: string; target: number; value: number; unit: string; done: boolean; startedBy: string }[];
+}
+
+export interface FunState {
+  wallet: { sparks: number; betsWon: number; predicted: number };
+  bets: {
+    id: number;
+    author: string;
+    authorName: string;
+    question: string;
+    status: 'open' | 'locked' | 'resolved' | 'cancelled';
+    winner: number | null;
+    createdAt: number;
+    pot: number;
+    options: { title: string; total: number; people: { id: string; nickname: string; amount: number; payout: number | null }[] }[];
+    mine: { option: number; amount: number; payout: number | null } | null;
+  }[];
+  predictions: {
+    evening: string;
+    open: boolean;
+    closesAtHour: number;
+    prize: number;
+    mine: Partial<Record<'talk' | 'stream', string>>;
+    tally: Record<'talk' | 'stream', { id: string; nickname: string; votes: number }[]>;
+    crowns: { talk: string | null; stream: string | null };
+  };
+  capsules: { id: number; target: string; createdAt: number; openAt: number; opened: boolean; text: string | null }[];
+  richest: { user_id: string; sparks: number; nickname: string }[];
+}
+
+export type FunEvent =
+  | { type: 'changed' }
+  | { type: 'bet-won'; amount: number; question: string }
+  | { type: 'predicted'; kind: string; amount: number }
+  | { type: 'capsule'; text: string; createdAt: number };
+
+export interface Recap {
+  week: string;
+  empty: boolean;
+  voiceMinutes: number;
+  talkMinutes: number;
+  gameMinutes: number;
+  streams: number;
+  streamMinutes: number;
+  messages: number;
+  days: number;
+  partners: { id: string; nickname: string; minutes: number }[];
+  games: { game: string; minutes: number }[];
+  achievements: string[];
+  challenges: { done: string[]; total: number };
+  /** Minutes in voice per weekday (0 = Monday) and hour. */
+  heat: number[][];
 }
 
 export type SessionEndReason = 'kicked' | 'invalid' | 'logout';

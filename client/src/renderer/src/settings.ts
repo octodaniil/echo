@@ -42,7 +42,12 @@ export interface Settings {
   uiSounds: boolean;
   /** 0..1 */
   uiSoundsVolume: number;
+  /** Opus bitrate of your voice: 48 / 64 / 128 kbit/s. */
+  voiceQuality: VoiceQuality;
 }
+
+export type VoiceQuality = 'standard' | 'high' | 'studio';
+export const VOICE_BITRATE: Record<VoiceQuality, number> = { standard: 48_000, high: 64_000, studio: 128_000 };
 
 export const defaults: Settings = {
   inputDeviceId: 'default',
@@ -56,6 +61,7 @@ export const defaults: Settings = {
   sensitivityDb: -50,
   userVolumes: {},
   streamVolumes: {},
+  voiceQuality: 'high',
   streamQuality: '1080p60',
   streamAudio: true,
   streamBitrate: null,

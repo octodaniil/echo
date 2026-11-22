@@ -2,6 +2,7 @@ import type { JSX } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import type { AchievementCategory, AchievementDef, Look, Prestige, Rarity } from '../../shared/types';
 import { lookVars, RANK_NAMES } from './look';
+import { RankEmblem } from './RankEmblem';
 
 // ---------- catalog (loaded once per session) ----------
 
@@ -217,6 +218,7 @@ export function LevelChip({ prestige, look }: { prestige: Prestige | undefined; 
       style={lookVars(look)}
       title={`${RANK_NAMES[prestige.tier]} · уровень ${prestige.level} · ${prestige.points} очков`}
     >
+      <RankEmblem tier={prestige.tier} size={11} withTitle={false} />
       {prestige.level}
     </span>
   );

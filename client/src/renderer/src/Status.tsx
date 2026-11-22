@@ -67,11 +67,17 @@ export function useMyStatus(current: UserStatus | undefined, inCall: boolean) {
 export function StatusMenu({
   current,
   onProfile,
+  onAchievements,
+  onRecap,
+  onFun,
   onClose,
   onError,
 }: {
   current: UserStatus | undefined;
   onProfile: () => void;
+  onAchievements: () => void;
+  onRecap: () => void;
+  onFun: () => void;
   onClose: () => void;
   onError: (msg: string) => void;
 }) {
@@ -104,6 +110,15 @@ export function StatusMenu({
 
   return (
     <div class="status-menu pop-in" ref={ref}>
+      <button class="status-menu-item" onClick={onAchievements}>
+        Мои ачивки
+      </button>
+      <button class="status-menu-item" onClick={onFun}>
+        Споры, прогнозы, капсулы
+      </button>
+      <button class="status-menu-item" onClick={onRecap}>
+        Итоги недели
+      </button>
       <button class="status-menu-item" onClick={onProfile}>
         Мой профиль
       </button>

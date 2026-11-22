@@ -54,6 +54,22 @@ export function FrameDefs() {
         <filter id="fGlow2" x="-50%" y="-50%" width="200%" height="200%">
           <feGaussianBlur stdDeviation="5" />
         </filter>
+        <linearGradient id="fNova" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="#ff3d00" />
+          <stop offset=".55" stop-color="#ffb02e" />
+          <stop offset="1" stop-color="#fff6d8" />
+        </linearGradient>
+        <linearGradient id="fHyper" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#fff" />
+          <stop offset=".4" stop-color="#ff5cc8" />
+          <stop offset="1" stop-color="#7b2fff" />
+        </linearGradient>
+        <radialGradient id="fLens" cx=".5" cy=".5" r=".5">
+          <stop offset=".5" stop-color="#000" stop-opacity="0" />
+          <stop offset=".58" stop-color="#ffd678" stop-opacity=".9" />
+          <stop offset=".66" stop-color="#b48cff" stop-opacity=".6" />
+          <stop offset="1" stop-color="#000" stop-opacity="0" />
+        </radialGradient>
         <path id="fTxt" d="M100,100 m-86,0 a86,86 0 1,1 172,0 a86,86 0 1,1 -172,0" />
         <path id="fTxt2" d="M100,100 m-84,0 a84,84 0 1,1 168,0 a84,84 0 1,1 -168,0" />
       </defs>
@@ -170,6 +186,112 @@ const FRAMES: Record<string, () => JSX.Element> = {
         <circle cx="60" cy="176" r="1.5" fill="#b48cff" />
         <circle cx="150" cy="30" r="1.2" fill="#fff" />
       </g>
+    </>
+  ),
+  pulsar: () => (
+    <>
+      <C r="62" stroke="#8fe3ff" stroke-width="2.5" />
+      <g class="fx-spin fx-fast" filter="url(#fGlow)">
+        <path d="M100 100 L196 70 L196 84 Z" fill="#d6f6ff" opacity=".8" />
+        <path d="M100 100 L4 130 L4 116 Z" fill="#d6f6ff" opacity=".8" />
+      </g>
+      <g fill="none" stroke="rgba(143,227,255,.35)">
+        <ellipse cx="100" cy="100" rx="80" ry="40" />
+        <ellipse cx="100" cy="100" rx="40" ry="80" />
+      </g>
+      <g class="fx-spin fx-slow fx-rev">
+        <C r="74" stroke="#8fe3ff" stroke-width="1" stroke-dasharray="2 4" />
+      </g>
+    </>
+  ),
+  magnetar: () => (
+    <>
+      <g fill="none" stroke="url(#fBlue)" stroke-width="2.2" filter="url(#fGlow)">
+        <path d="M100 38 C40 -10 40 210 100 162" />
+        <path d="M100 38 C160 -10 160 210 100 162" />
+        <path d="M100 38 C10 -40 10 240 100 162" opacity=".45" />
+        <path d="M100 38 C190 -40 190 240 100 162" opacity=".45" />
+      </g>
+      <C r="62" stroke="url(#fBlue)" stroke-width="4" filter="url(#fGlow)" />
+      <g stroke="#e6faff" stroke-width="2" fill="none" class="fx-zap">
+        <path d="M150 50 l-8 10 l7 2 l-9 12" />
+        <path d="M48 150 l8 -10 l-7 -2 l9 -12" />
+      </g>
+    </>
+  ),
+  supernova: () => (
+    <>
+      <C r="70" stroke="#ffb02e" stroke-width="3" class="fx-wave" />
+      <C r="70" stroke="#ffd36b" stroke-width="2" class="fx-wave fx-wave2" />
+      <C r="62" stroke="url(#fNova)" stroke-width="5" filter="url(#fGlow)" />
+      <g class="fx-spin fx-slow" fill="#ffd36b">
+        <circle cx="100" cy="14" r="2.5" />
+        <circle cx="176" cy="66" r="2" />
+        <circle cx="160" cy="160" r="3" />
+        <circle cx="40" cy="168" r="2" />
+        <circle cx="20" cy="80" r="2.5" />
+        <circle cx="64" cy="24" r="1.6" />
+        <circle cx="150" cy="30" r="1.8" />
+      </g>
+      <g stroke="#fff6d8" stroke-width="2" stroke-linecap="round" opacity=".8">
+        <path d="M100 28v-10M172 100h10M100 172v10M28 100H18" />
+      </g>
+    </>
+  ),
+  hypernova: () => (
+    <>
+      <C r="96" stroke="url(#fHyper)" stroke-width="10" opacity=".25" filter="url(#fGlow2)" />
+      <g class="fx-pulse" filter="url(#fGlow)">
+        <path d="M100 0 L108 52 L92 52 Z" fill="url(#fHyper)" />
+        <path d="M100 200 L92 148 L108 148 Z" fill="url(#fHyper)" />
+      </g>
+      <C r="74" stroke="#ff5cc8" stroke-width="2" class="fx-wave" />
+      <C r="74" stroke="#7b2fff" stroke-width="2" class="fx-wave fx-wave2" />
+      <g class="fx-spin fx-fast">
+        <C r="68" stroke="#fff" stroke-width="1.5" pathLength="100" stroke-dasharray="15 35" filter="url(#fGlow)" />
+      </g>
+      <C r="62" stroke="url(#fHyper)" stroke-width="4" />
+    </>
+  ),
+  absolute: () => (
+    <>
+      <circle cx="100" cy="100" r="98" fill="url(#fLens)" class="fx-pulse" />
+      <g class="fx-spin fx-slow">
+        <text font-family="JetBrains Mono, monospace" font-size="8" font-weight="700" letter-spacing="3" fill="#ffd678" opacity=".8">
+          <textPath href="#fTxt">LEVEL 50 // SINGULARITY // ABSOLUTE // LEVEL 50 // SINGULARITY // ABSOLUTE //</textPath>
+        </text>
+      </g>
+      <ellipse cx="100" cy="100" rx="94" ry="24" fill="none" stroke="url(#fGold)" stroke-width="5" opacity=".35" filter="url(#fGlow2)" />
+      <g class="fx-spin fx-fast">
+        <ellipse cx="100" cy="100" rx="90" ry="20" fill="none" stroke="url(#fGold)" stroke-width="2" stroke-dasharray="24 8 4 8" />
+      </g>
+      <C r="64" stroke="#000" stroke-width="10" />
+      <g class="fx-spin">
+        <C r="68" stroke="#fff" stroke-width="1.8" pathLength="100" stroke-dasharray="40 60" filter="url(#fGlow)" />
+      </g>
+      <C r="61" stroke="url(#fGold)" stroke-width="2.5" />
+      <g class="fx-spin fx-slow fx-rev" fill="#fff">
+        <circle cx="180" cy="40" r="2" class="fx-twinkle" />
+        <circle cx="24" cy="160" r="2.4" class="fx-twinkle" />
+        <circle cx="170" cy="168" r="1.6" class="fx-twinkle" />
+        <circle cx="30" cy="34" r="1.4" class="fx-twinkle" />
+      </g>
+      <g transform="translate(100 26)" filter="url(#fGlow)">
+        <path d="M0 -10 L3 -3 L10 0 L3 3 L0 10 L-3 3 L-10 0 L-3 -3 Z" fill="#fff" />
+      </g>
+    </>
+  ),
+  bond: () => (
+    <>
+      <g filter="url(#fGlow)" fill="none" stroke-width="3">
+        <circle cx="88" cy="100" r="62" stroke="#29f0cf" />
+        <circle cx="112" cy="100" r="62" stroke="#ff7ab8" />
+      </g>
+      <g class="fx-spin fx-slow">
+        <circle cx="100" cy="30" r="4" fill="#fff" />
+        <circle cx="100" cy="170" r="4" fill="#fff" />
+      </g>
+      <path d="M100 34 C 84 24, 86 8, 100 17 C 114 8, 116 24, 100 34 Z" fill="#ff7ab8" stroke="#fff" stroke-width="1.5" filter="url(#fGlow)" />
     </>
   ),
   owl: () => (
@@ -378,6 +500,12 @@ export const FRAME_COLOR: Record<string, string> = {
   impulse: '#ff5c9a',
   accretion: '#b48cff',
   horizon: '#ff9cf0',
+  pulsar: '#8fe3ff',
+  magnetar: '#5ab4ff',
+  supernova: '#ffb02e',
+  hypernova: '#ff5cc8',
+  absolute: '#ffd678',
+  bond: '#ff7ab8',
   owl: '#9aa6ff',
   eternal: '#ff7a1a',
   onair: '#ff3d8b',

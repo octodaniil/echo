@@ -18,6 +18,12 @@ export class MicPipeline {
   private readonly dest = this.ctx.createMediaStreamDestination();
   private readonly inputGain = this.ctx.createGain();
   private readonly gate = this.ctx.createGain();
+  /**
+   * 40 ms look-ahead: voice activation decides on the live signal but the audio passing the
+   * gate is delayed, so the gate is already open when the first syllable arrives (the start
+   * of words used to be clipped). 40 ms is not noticeable in conversation.
+   */
+  private readonly lookahead = this.ctx.createDelay(0.2);
   private readonly analyser = this.ctx.createAnalyser();
   private readonly samples = new Float32Array(512);
   /** Raw microphone signal (before RNNoise / gain): to notice a mic that went dead. */
@@ -76,7 +82,10 @@ export class MicPipeline {
     navigator.mediaDevices.addEventListener('devicechange', this.onDeviceChange);
     this.gate.gain.value = 0;
     this.inputGain.connect(this.analyser);
-    this.inputGain.connect(this.gate);
+    this.lookahead.delayTime.value = 0.04;
+    this.lookahead.channelCount = 1;
+    this.lookahead.channelCountMode = 'explicit';
+    this.inputGain.connect(this.lookahead).connect(this.gate);
     this.gate.connect(this.dest);
   }
 

@@ -14,8 +14,8 @@ import {
   type TrackPublication,
 } from 'livekit-client';
 import { MicPipeline } from './mic';
-import { play } from './sounds';
-import { settings, type Settings } from './settings';
+import { play, playUserJoin } from './sounds';
+import { settings, VOICE_BITRATE, type Settings } from './settings';
 import { streamLabel, streamParams } from './streamQuality';
 
 export type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting';
@@ -112,6 +112,7 @@ class VoiceClient {
   private room: Room | null = null;
   private micTrack: LocalAudioTrack | null = null;
   private pipeline: MicPipeline | null = null;
+  private lastActivityPing = 0;
   private pipelineStarting: Promise<MicPipeline> | null = null;
   /** Things besides a call that need the mic open (e.g. the settings screen). */
   private previewUsers = 0;
@@ -161,7 +162,14 @@ class VoiceClient {
         await p.destroy();
         throw err;
       }
-      p.onGateChange(() => this.syncParticipants());
+      p.onGateChange((open) => {
+        this.syncParticipants();
+        // "I'm talking" keeps us out of AFK (the server can't hear us).
+        if (open && this.room && this.state.status === 'connected' && !this.state.micMuted && Date.now() - this.lastActivityPing > 15_000) {
+          this.lastActivityPing = Date.now();
+          void window.echo.voiceActivity().catch(() => {});
+        }
+      });
       // Tell the user when Echo had to bring the mic back by itself (so we learn what happens).
       p.onRecover((reason) => {
         if (this.room) this.set({ error: `Микрофон: ${reason}. Echo сам всё починил — говори дальше` });
@@ -200,6 +208,16 @@ class VoiceClient {
     }
   }
 
+  /** Changes the voice bitrate on the fly (no reconnect). */
+  private async applyVoiceBitrate(s: Settings) {
+    const sender = this.micTrack?.sender;
+    if (!sender) return;
+    const params = sender.getParameters();
+    if (!params.encodings?.length) params.encodings = [{}];
+    params.encodings[0]!.maxBitrate = VOICE_BITRATE[s.voiceQuality] ?? 64_000;
+    await sender.setParameters(params).catch((err) => console.warn('[voice] bitrate', err));
+  }
+
   private async onSettings(next: Settings, prev: Settings) {
     if (this.room && next.noiseSuppression !== prev.noiseSuppression) {
       void this.room.localParticipant.setAttributes({ ns: next.noiseSuppression }).catch(() => {});
@@ -209,6 +227,7 @@ class VoiceClient {
     } catch (err) {
       this.set({ error: errorText(err) });
     }
+    if (this.micTrack && next.voiceQuality !== prev.voiceQuality) await this.applyVoiceBitrate(next);
     if (this.room && next.outputDeviceId !== prev.outputDeviceId) {
       await this.room.switchActiveDevice('audiooutput', next.outputDeviceId).catch(() => {});
     }
@@ -390,8 +409,8 @@ class VoiceClient {
 
     const sync = () => this.room === room && this.syncParticipants();
     room
-      .on(RoomEvent.ParticipantConnected, () => {
-        void play('userJoin');
+      .on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
+        playUserJoin(p.identity);
         sync();
       })
       .on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
@@ -475,7 +494,7 @@ class VoiceClient {
         dtx: true,
         // Redundant audio: survives packet loss without retransmit delays.
         red: true,
-        audioPreset: { maxBitrate: 48_000 },
+        audioPreset: { maxBitrate: VOICE_BITRATE[settings.get().voiceQuality] ?? 64_000 },
       });
       if (this.state.micMuted || this.state.deafened || this.micTesting) await micTrack.mute();
 
@@ -498,7 +517,12 @@ class VoiceClient {
     if (!room || !track || this.state.status !== 'connected') return;
     if ([...room.localParticipant.audioTrackPublications.values()].some((p) => p.track === track)) return;
     await room.localParticipant
-      .publishTrack(track, { source: Track.Source.Microphone, dtx: true, red: true, audioPreset: { maxBitrate: 48_000 } })
+      .publishTrack(track, {
+        source: Track.Source.Microphone,
+        dtx: true,
+        red: true,
+        audioPreset: { maxBitrate: VOICE_BITRATE[settings.get().voiceQuality] ?? 64_000 },
+      })
       .catch((err) => console.warn('[voice] republish mic', err));
     if (this.state.micMuted || this.state.deafened || this.micTesting) await track.mute();
   }
