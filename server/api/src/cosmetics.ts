@@ -5,7 +5,8 @@ import { queries, type User } from './db.ts';
  * Cosmetics unlocked by progress. The server owns the rules (what is unlocked, what is
  * equipped); the client owns the looks and renders each item by its id.
  */
-export type Slot = 'ring' | 'frame' | 'name' | 'plate';
+export type Slot = 'ring' | 'frame' | 'name' | 'plate' | 'sound';
+const SLOT_IDS = ['ring', 'frame', 'name', 'plate', 'sound'] as const;
 
 export interface Unlock {
   /** Reach this level. */
@@ -34,6 +35,7 @@ export const SLOTS: { id: Slot; title: string }[] = [
   { id: 'plate', title: 'Фон строки' },
   { id: 'name', title: 'Эффект ника' },
   { id: 'ring', title: 'Цвет кольца уровня' },
+  { id: 'sound', title: 'Звук входа в голос' },
 ];
 
 const free: Unlock = {};
@@ -45,12 +47,12 @@ export const COSMETICS: Cosmetic[] = [
   item('ring', 'cyan', 'Циан', 'basic'),
   item('ring', 'violet', 'Фиалка', 'basic'),
   item('ring', 'lime', 'Лайм', 'basic'),
-  item('ring', 'rose', 'Роза', 'level', { level: 3 }),
-  item('ring', 'amber', 'Янтарь', 'level', { level: 5 }),
-  item('ring', 'white', 'Белый шум', 'level', { level: 7 }),
-  item('ring', 'aurora', 'Аврора', 'level', { level: 9 }),
-  item('ring', 'plasma', 'Плазма', 'level', { level: 13 }),
-  item('ring', 'void', 'Горизонт событий', 'level', { level: 17 }),
+  item('ring', 'rose', 'Роза', 'level', { level: 5 }),
+  item('ring', 'amber', 'Янтарь', 'level', { level: 10 }),
+  item('ring', 'white', 'Белый шум', 'level', { level: 15 }),
+  item('ring', 'aurora', 'Аврора', 'level', { level: 20 }),
+  item('ring', 'plasma', 'Плазма', 'level', { level: 30 }),
+  item('ring', 'void', 'Горизонт событий', 'level', { level: 45 }),
   item('ring', 'ember', 'Угли', 'achievement', { achievement: 'streak_30' }),
   item('ring', 'prism', 'Призма', 'achievement', { unique: true }),
 
@@ -60,17 +62,23 @@ export const COSMETICS: Cosmetic[] = [
   item('frame', 'brackets', 'Скобки', 'basic'),
   item('frame', 'dotted', 'Пунктир', 'basic'),
   item('frame', 'scale', 'Шкала', 'basic'),
-  item('frame', 'radar', 'Пеленг', 'level', { level: 3 }),
-  item('frame', 'resonator', 'Резонатор', 'level', { level: 5 }),
-  item('frame', 'impulse', 'Импульсный контур', 'level', { level: 9 }),
-  item('frame', 'accretion', 'Аккреционный диск', 'level', { level: 13 }),
-  item('frame', 'horizon', 'Горизонт событий', 'level', { level: 17 }),
+  item('frame', 'radar', 'Пеленг', 'level', { level: 5 }),
+  item('frame', 'resonator', 'Резонатор', 'level', { level: 10 }),
+  item('frame', 'impulse', 'Импульсный контур', 'level', { level: 15 }),
+  item('frame', 'accretion', 'Аккреционный диск', 'level', { level: 20 }),
+  item('frame', 'pulsar', 'Пульсар', 'level', { level: 25 }),
+  item('frame', 'magnetar', 'Магнетар', 'level', { level: 30 }),
+  item('frame', 'supernova', 'Сверхновая', 'level', { level: 35 }),
+  item('frame', 'hypernova', 'Гиперновая', 'level', { level: 40 }),
+  item('frame', 'horizon', 'Горизонт событий', 'level', { level: 45 }),
+  item('frame', 'absolute', 'Абсолют', 'level', { level: 50 }),
   item('frame', 'owl', 'Полуночник', 'achievement', { achievement: 'night_owl_10' }),
   item('frame', 'eternal', 'Неугасимый', 'achievement', { achievement: 'streak_30' }),
   item('frame', 'onair', 'Прямой эфир', 'achievement', { achievement: 'stream_50' }),
   item('frame', 'legend', 'Голос легенды', 'achievement', { achievement: 'voice_100h' }),
   item('frame', 'five', 'Пятёрка', 'achievement', { achievement: 'squad_5' }),
   item('frame', 'prism', 'Призма', 'achievement', { unique: true }),
+  item('frame', 'bond', 'Связка', 'achievement', { achievement: 'dq_1' }),
   item('frame', 'pioneer', 'Первопроходец', 'pioneer', { role: 'pioneer' }),
   item('frame', 'circle', 'Круг своих', 'pioneer', { achievement: 'p_regular_guest' }),
   item('frame', 'bughunter', 'Прицел', 'pioneer', { achievement: 'p_game_night' }),
@@ -81,9 +89,15 @@ export const COSMETICS: Cosmetic[] = [
   item('plate', 'none', 'Без фона', 'basic'),
   item('plate', 'line', 'Линия', 'basic'),
   item('plate', 'gradient', 'Градиент', 'basic'),
-  item('plate', 'scanline', 'Развёртка', 'level', { level: 5 }),
-  item('plate', 'datastream', 'Поток данных', 'level', { level: 9 }),
-  item('plate', 'horizon', 'Горизонт', 'level', { level: 17 }),
+  item('plate', 'scanline', 'Развёртка', 'level', { level: 10 }),
+  item('plate', 'filament', 'Плазменная нить', 'level', { level: 15 }),
+  item('plate', 'datastream', 'Поток данных', 'level', { level: 20 }),
+  item('plate', 'beam', 'Луч пульсара', 'level', { level: 25 }),
+  item('plate', 'field', 'Магнитное поле', 'level', { level: 30 }),
+  item('plate', 'wind', 'Звёздный ветер', 'level', { level: 35 }),
+  item('plate', 'nova', 'Сверхновая', 'level', { level: 40 }),
+  item('plate', 'horizon', 'Горизонт', 'level', { level: 45 }),
+  item('plate', 'singularity', 'Сингулярность', 'level', { level: 50 }),
   item('plate', 'stars', 'Ночное небо', 'achievement', { achievement: 'new_year' }),
   item('plate', 'flame', 'Пламя', 'achievement', { achievement: 'streak_30' }),
   item('plate', 'air', 'Эфир', 'achievement', { achievement: 'stream_50' }),
@@ -96,14 +110,32 @@ export const COSMETICS: Cosmetic[] = [
   item('name', 'none', 'Обычный', 'basic'),
   item('name', 'glow', 'Свечение', 'basic'),
   item('name', 'gradient', 'Градиент', 'basic'),
-  item('name', 'scan', 'Сканер', 'level', { level: 9 }),
-  item('name', 'glitch', 'Глитч', 'level', { level: 13 }),
-  item('name', 'chrome', 'Хром', 'level', { level: 17 }),
+  item('name', 'scan', 'Сканер', 'level', { level: 15 }),
+  item('name', 'glitch', 'Глитч', 'level', { level: 25 }),
+  item('name', 'plasma', 'Плазма', 'level', { level: 35 }),
+  item('name', 'chrome', 'Хром', 'level', { level: 40 }),
+  item('name', 'singularity', 'Сингулярность', 'level', { level: 50 }),
   item('name', 'holo', 'Голограмма', 'achievement', { unique: true }),
   item('name', 'pioneer', 'Первопроходец', 'pioneer', { role: 'pioneer' }),
   item('name', 'sunset', 'Закат', 'pioneer', { achievement: 'p_weekend' }),
   item('name', 'crown', 'Корона', 'exclusive', { role: 'admin' }),
   item('name', 'guard', 'Страж', 'exclusive', { role: 'staff' }),
+
+  // ---- entry sound: what everyone in the channel hears when you join
+  item('sound', 'default', 'Стандартный', 'basic'),
+  item('sound', 'chime', 'Колокольчик', 'basic'),
+  item('sound', 'blip', 'Блип', 'basic'),
+  item('sound', 'rise', 'Взлёт', 'level', { level: 5 }),
+  item('sound', 'arp', 'Арпеджио', 'level', { level: 10 }),
+  item('sound', 'radar', 'Радар', 'level', { level: 15 }),
+  item('sound', 'warp', 'Варп', 'level', { level: 20 }),
+  item('sound', 'chord', 'Аккорд', 'level', { level: 25 }),
+  item('sound', 'fanfare', 'Фанфары', 'level', { level: 30 }),
+  item('sound', 'portal', 'Портал', 'level', { level: 35 }),
+  item('sound', 'hyper', 'Гиперпрыжок', 'level', { level: 40 }),
+  item('sound', 'nova', 'Сверхновая', 'level', { level: 45 }),
+  item('sound', 'singularity', 'Сингулярность', 'level', { level: 50 }),
+  item('sound', 'royal', 'Королевский выход', 'exclusive', { role: 'admin' }),
 ];
 
 /** Items the admin can hand out manually ("slot:id"). */
@@ -114,9 +146,10 @@ export interface Style {
   frame: string;
   name: string;
   plate: string;
+  sound: string;
 }
 
-export const DEFAULT_STYLE: Style = { ring: 'accent', frame: 'none', name: 'none', plate: 'none' };
+export const DEFAULT_STYLE: Style = { ring: 'accent', frame: 'none', name: 'none', plate: 'none', sound: 'default' };
 
 const find = (slot: Slot, id: string) => COSMETICS.find((c) => c.slot === slot && c.id === id);
 
@@ -184,7 +217,7 @@ export function styleContext() {
       const hasUnique = [...have].some((code) => UNIQUE_CODES.has(code));
       const want = parseStyle(json);
       const out = { ...DEFAULT_STYLE };
-      for (const slot of ['ring', 'frame', 'name', 'plate'] as const) {
+      for (const slot of SLOT_IDS) {
         const id = want[slot];
         const c = typeof id === 'string' ? find(slot, id) : undefined;
         if (c && open(userId, c, p, have, hasUnique)) out[slot] = c.id;
@@ -219,7 +252,7 @@ export function equip(userId: string, patch: Partial<Record<Slot, string>>): Sty
   const row = queries.styleStatus.get(userId) as { style: string } | undefined;
   const current = ctx.resolve(userId, row?.style);
   const unlocked = ctx.catalog(userId);
-  for (const slot of ['ring', 'frame', 'name', 'plate'] as const) {
+  for (const slot of SLOT_IDS) {
     const id = patch[slot];
     if (id === undefined) continue;
     const c = unlocked.find((x) => x.slot === slot && x.id === id);

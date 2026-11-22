@@ -102,6 +102,10 @@ addColumn('banned_until', 'banned_until INTEGER');
 addColumn('ban_reason', 'ban_reason TEXT');
 addColumn('muted_until', 'muted_until INTEGER');
 addColumn('cosmetics_granted', 'cosmetics_granted TEXT');
+// Counters for the chat / stream ladders.
+addColumn('messages_count', 'messages_count INTEGER NOT NULL DEFAULT 0');
+addColumn('images_count', 'images_count INTEGER NOT NULL DEFAULT 0');
+addColumn('stream_seconds', 'stream_seconds INTEGER NOT NULL DEFAULT 0');
 addColumn('is_pioneer', 'is_pioneer INTEGER NOT NULL DEFAULT 0');
 addColumn('style', "style TEXT NOT NULL DEFAULT '{}'");
 addColumn('status', "status TEXT NOT NULL DEFAULT '{}'");

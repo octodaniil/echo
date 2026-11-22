@@ -1,7 +1,9 @@
 import { db, queries, type User } from './db.ts';
+import * as weekly from './weekly.ts';
+import * as fun from './fun.ts';
 
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'unique';
-export type Category = 'special' | 'voice' | 'games' | 'stream' | 'social' | 'secret' | 'pioneers';
+export type Category = 'special' | 'voice' | 'games' | 'stream' | 'social' | 'chat' | 'collection' | 'secret' | 'pioneers';
 
 export interface AchievementDef {
   code: string;
@@ -27,11 +29,107 @@ export const CATEGORIES: { id: Category; title: string }[] = [
   { id: 'games', title: 'Игры' },
   { id: 'stream', title: 'Трансляции' },
   { id: 'social', title: 'Компания' },
+  { id: 'chat', title: 'Чат' },
+  { id: 'collection', title: 'Коллекция' },
   { id: 'secret', title: 'Секреты' },
   { id: 'pioneers', title: 'Первооткрыватели' },
 ];
 
 const U = 'Такая ачивка может быть только у одного человека';
+
+
+/** Counters the tiered achievements are measured by. */
+export type Metric =
+  | 'voiceH' | 'gameH' | 'streams' | 'streamH' | 'days' | 'streak' | 'nights' | 'games' | 'bestGameH'
+  | 'partners' | 'bestPairH' | 'messages' | 'images' | 'dms' | 'achievements' | 'challenges' | 'quests' | 'bets' | 'predictions';
+
+interface Series {
+  code: string;
+  title: string;
+  description: string;
+  rarity: Rarity;
+  category: Category;
+  icon: string;
+  metric: Metric;
+  target: number;
+  unit: string;
+}
+
+const sx = (code: string, title: string, description: string, rarity: Rarity, category: Category, icon: string, metric: Metric, target: number, unit: string): Series =>
+  ({ code, title, description, rarity, category, icon, metric, target, unit });
+
+/** Ladders so an active friend can climb to level 50 over months (each step is harder). */
+const SERIES: Series[] = [
+  // voice
+  sx('voice_25h', 'Завсегдатай войса', 'Провёл в голосе 25 часов', 'rare', 'voice', 'waves', 'voiceH', 25, 'ч'),
+  sx('voice_50h', 'Голос эпохи', 'Провёл в голосе 50 часов', 'epic', 'voice', 'waves', 'voiceH', 50, 'ч'),
+  sx('voice_250h', 'Частота жизни', 'Провёл в голосе 250 часов', 'legendary', 'voice', 'infinity', 'voiceH', 250, 'ч'),
+  sx('voice_1000h', 'Тысяча часов', 'Провёл в голосе 1000 часов', 'legendary', 'voice', 'infinity', 'voiceH', 1000, 'ч'),
+  sx('days_10', 'Десять дней', 'Был в голосе в 10 разных дней', 'common', 'voice', 'calendar', 'days', 10, 'дн'),
+  sx('days_30', 'Месяц в Echo', 'Был в голосе в 30 разных дней', 'rare', 'voice', 'calendar', 'days', 30, 'дн'),
+  sx('days_60', 'Два месяца', 'Был в голосе в 60 разных дней', 'epic', 'voice', 'calendar', 'days', 60, 'дн'),
+  sx('days_200', 'Двести дней', 'Был в голосе в 200 разных дней', 'legendary', 'voice', 'calendar', 'days', 200, 'дн'),
+  sx('days_365', 'Год в эфире', 'Был в голосе в 365 разных дней', 'legendary', 'voice', 'calendar', 'days', 365, 'дн'),
+  sx('streak_3', 'Три дня подряд', 'Заходил в голос 3 дня подряд', 'common', 'voice', 'flame', 'streak', 3, 'дн подряд'),
+  sx('streak_14', 'Две недели в строю', 'Заходил в голос 14 дней подряд', 'epic', 'voice', 'flame', 'streak', 14, 'дн подряд'),
+  sx('streak_60', 'Непрерывный сигнал', 'Заходил в голос 60 дней подряд', 'legendary', 'voice', 'flame', 'streak', 60, 'дн подряд'),
+  sx('streak_100', 'Сто дней', 'Заходил в голос 100 дней подряд', 'legendary', 'voice', 'flame', 'streak', 100, 'дн подряд'),
+  sx('night_owl_3', 'Ночной житель', 'Был в голосе глубокой ночью (3–5) в 3 разных ночи', 'rare', 'voice', 'moon', 'nights', 3, 'ночей'),
+  sx('night_owl_30', 'Король ночи', 'Был в голосе глубокой ночью (3–5) в 30 разных ночей', 'legendary', 'voice', 'owl', 'nights', 30, 'ночей'),
+  // games
+  sx('game_25h', 'Втянулся', 'Наиграл 25 часов', 'rare', 'games', 'joystick', 'gameH', 25, 'ч'),
+  sx('game_50h', 'Игрок', 'Наиграл 50 часов', 'epic', 'games', 'joystick', 'gameH', 50, 'ч'),
+  sx('game_250h', 'Ветеран', 'Наиграл 250 часов', 'legendary', 'games', 'trophy', 'gameH', 250, 'ч'),
+  sx('game_1000h', 'Тысяча часов в играх', 'Наиграл 1000 часов', 'legendary', 'games', 'medal', 'gameH', 1000, 'ч'),
+  sx('collector_3', 'Пробую всё', 'Играл в 3 разные игры', 'common', 'games', 'stack', 'games', 3, 'игр'),
+  sx('collector_10', 'Широкий профиль', 'Играл в 10 разных игр', 'epic', 'games', 'stack', 'games', 10, 'игр'),
+  sx('collector_40', 'Живая библиотека', 'Играл в 40 разных игр', 'legendary', 'games', 'stack', 'games', 40, 'игр'),
+  sx('one_game_25h', 'Нашёл свою', 'Наиграл 25 часов в одной игре', 'rare', 'games', 'heart', 'bestGameH', 25, 'ч'),
+  sx('one_game_250h', 'Мастер одной игры', 'Наиграл 250 часов в одной игре', 'legendary', 'games', 'heart', 'bestGameH', 250, 'ч'),
+  // streams
+  sx('stream_25', 'Регулярный эфир', 'Провёл 25 трансляций', 'rare', 'stream', 'signal', 'streams', 25, 'эфиров'),
+  sx('stream_100', 'Сотый эфир', 'Провёл 100 трансляций', 'epic', 'stream', 'tv', 'streams', 100, 'эфиров'),
+  sx('streamh_5', 'Пять часов в эфире', 'Стримил в сумме 5 часов', 'rare', 'stream', 'broadcast', 'streamH', 5, 'ч'),
+  sx('streamh_25', 'В прямом эфире', 'Стримил в сумме 25 часов', 'epic', 'stream', 'broadcast', 'streamH', 25, 'ч'),
+  sx('streamh_100', 'Свой канал', 'Стримил в сумме 100 часов', 'legendary', 'stream', 'tv', 'streamH', 100, 'ч'),
+  // company
+  sx('met_3', 'Компания', 'Посидел в голосе с 3 разными людьми', 'common', 'social', 'people', 'partners', 3, 'чел'),
+  sx('met_10', 'Все свои', 'Посидел в голосе с 10 разными людьми', 'epic', 'social', 'people', 'partners', 10, 'чел'),
+  sx('met_20', 'Связующее звено', 'Посидел в голосе с 20 разными людьми', 'legendary', 'social', 'globe', 'partners', 20, 'чел'),
+  sx('duo_10h', 'Напарник', '10 часов в голосе вместе с одним человеком', 'rare', 'social', 'handshake', 'bestPairH', 10, 'ч'),
+  sx('duo_25h', 'Лучшие друзья', '25 часов в голосе вместе с одним человеком', 'epic', 'social', 'heart', 'bestPairH', 25, 'ч'),
+  sx('duo_250h', 'Одна волна', '250 часов в голосе вместе с одним человеком', 'legendary', 'social', 'heart', 'bestPairH', 250, 'ч'),
+  // chat
+  sx('msg_1', 'Первое сообщение', 'Написал первое сообщение в чат', 'common', 'chat', 'chat', 'messages', 1, 'сообщ.'),
+  sx('msg_100', 'Болтун', 'Написал 100 сообщений', 'rare', 'chat', 'chat', 'messages', 100, 'сообщ.'),
+  sx('msg_500', 'Собеседник', 'Написал 500 сообщений', 'epic', 'chat', 'chat', 'messages', 500, 'сообщ.'),
+  sx('msg_2000', 'Летописец', 'Написал 2000 сообщений', 'legendary', 'chat', 'chat', 'messages', 2000, 'сообщ.'),
+  sx('msg_10000', 'Голос чата', 'Написал 10 000 сообщений', 'legendary', 'chat', 'sparkle', 'messages', 10000, 'сообщ.'),
+  sx('img_1', 'Смотрите!', 'Отправил первую картинку в чат', 'common', 'chat', 'stack', 'images', 1, 'картинок'),
+  sx('img_25', 'Фотограф', 'Отправил 25 картинок', 'rare', 'chat', 'stack', 'images', 25, 'картинок'),
+  sx('img_250', 'Галерея', 'Отправил 250 картинок', 'epic', 'chat', 'stack', 'images', 250, 'картинок'),
+  sx('dm_1', 'Личный разговор', 'Написал кому-то в личку', 'common', 'chat', 'door', 'dms', 1, 'чел'),
+  sx('dm_5', 'На связи', 'Переписывался в личке с 5 людьми', 'rare', 'chat', 'door', 'dms', 5, 'чел'),
+  sx('dm_10', 'Всем привет', 'Переписывался в личке с 10 людьми', 'epic', 'chat', 'globe', 'dms', 10, 'чел'),
+  // collection (achievements themselves)
+  sx('ch_1', 'Испытатель', 'Выполнил первое еженедельное испытание', 'common', 'collection', 'flag', 'challenges', 1, 'испытаний'),
+  sx('ch_10', 'Охотник за испытаниями', 'Выполнил 10 еженедельных испытаний', 'rare', 'collection', 'flag', 'challenges', 10, 'испытаний'),
+  sx('ch_30', 'Неделя за неделей', 'Выполнил 30 еженедельных испытаний', 'epic', 'collection', 'medal', 'challenges', 30, 'испытаний'),
+  sx('ch_75', 'Покоритель недель', 'Выполнил 75 еженедельных испытаний', 'legendary', 'collection', 'trophy', 'challenges', 75, 'испытаний'),
+  sx('bet_1', 'Счастливый билет', 'Выиграл первый спор', 'common', 'social', 'sparkle', 'bets', 1, 'споров'),
+  sx('bet_10', 'Азартный', 'Выиграл 10 споров', 'rare', 'social', 'stack', 'bets', 10, 'споров'),
+  sx('bet_50', 'Знает, на что ставить', 'Выиграл 50 споров', 'epic', 'social', 'trophy', 'bets', 50, 'споров'),
+  sx('pr_1', 'Предчувствие', 'Угадал первую корону вечера', 'common', 'social', 'compass', 'predictions', 1, 'прогнозов'),
+  sx('pr_10', 'Провидец', 'Угадал 10 корон вечера', 'rare', 'social', 'globe', 'predictions', 10, 'прогнозов'),
+  sx('pr_30', 'Оракул', 'Угадал 30 корон вечера', 'epic', 'social', 'singularity', 'predictions', 30, 'прогнозов'),
+  sx('dq_1', 'Связка', 'Прошёл первый квест на двоих', 'rare', 'social', 'handshake', 'quests', 1, 'квестов'),
+  sx('dq_5', 'Слаженная пара', 'Прошёл 5 квестов на двоих', 'epic', 'social', 'handshake', 'quests', 5, 'квестов'),
+  sx('dq_20', 'Неразлучный дуэт', 'Прошёл 20 квестов на двоих', 'legendary', 'social', 'heart', 'quests', 20, 'квестов'),
+  sx('ach_10', 'Первая полка', 'Собрал 10 ачивок', 'rare', 'collection', 'trophy', 'achievements', 10, 'ачивок'),
+  sx('ach_25', 'Витрина', 'Собрал 25 ачивок', 'epic', 'collection', 'trophy', 'achievements', 25, 'ачивок'),
+  sx('ach_50', 'Зал славы', 'Собрал 50 ачивок', 'legendary', 'collection', 'medal', 'achievements', 50, 'ачивок'),
+  sx('ach_100', 'Музей имени себя', 'Собрал 100 ачивок', 'legendary', 'collection', 'crown', 'achievements', 100, 'ачивок'),
+];
 
 export const CATALOG: AchievementDef[] = [
   // ---------- unique: one holder, ever ----------
@@ -42,6 +140,8 @@ export const CATALOG: AchievementDef[] = [
   { code: 'first_singularity', title: 'Сингулярность №1', description: `Первым дошёл до высшего ранга. ${U}`, rarity: 'unique', category: 'special', icon: 'singularity', unique: true },
   { code: 'first_secret', title: 'Взломщик', description: `Первым открыл секретную ачивку. ${U}`, rarity: 'unique', category: 'special', icon: 'key', unique: true },
   { code: 'first_museum', title: 'Музей', description: `Первым сыграл в 25 разных игр. ${U}`, rarity: 'unique', category: 'special', icon: 'stack', unique: true },
+  { code: 'first_level_50', title: 'Абсолют', description: `Первым дошёл до 50 уровня. ${U}`, rarity: 'unique', category: 'special', icon: 'singularity', unique: true },
+  { code: 'first_1000h', title: 'Вечный голос', description: `Первым провёл в голосе 1000 часов. ${U}`, rarity: 'unique', category: 'special', icon: 'infinity', unique: true },
   { code: 'iron_streak', title: 'Несгибаемый', description: `Первым заходил в голос 30 дней подряд. ${U}`, rarity: 'unique', category: 'special', icon: 'flame', unique: true },
 
   // ---------- voice ----------
@@ -94,7 +194,12 @@ export const CATALOG: AchievementDef[] = [
   { code: 'leet', title: '1337', description: 'Был в голосе в 13:37', rarity: 'rare', category: 'secret', icon: 'terminal', hidden: true },
   { code: 'friday13', title: 'Пятница, 13', description: 'Был в голосе в пятницу 13-го', rarity: 'epic', category: 'secret', icon: 'cat', hidden: true },
   { code: 'new_year', title: 'С Новым годом!', description: 'Встретил Новый год в голосовом канале', rarity: 'legendary', category: 'secret', icon: 'sparkle', hidden: true },
+  { code: 'silent_watcher', title: 'Наблюдатель', description: 'Час просидел в голосе с друзьями и не сказал ни слова', rarity: 'rare', category: 'secret', icon: 'ghost', hidden: true },
+  { code: 'session_2h', title: 'Засиделся', description: 'Два часа подряд в голосе — и всё это время был в разговоре', rarity: 'common', category: 'voice', icon: 'timer' },
   { code: 'comeback', title: 'Блудный сын', description: 'Вернулся в голос после 30 дней отсутствия', rarity: 'rare', category: 'secret', icon: 'door', hidden: true },
+
+  // ---------- tiered series: awarded automatically when a counter reaches the target ----------
+  ...SERIES.map(({ code, title, description, rarity, category, icon }) => ({ code, title, description, rarity, category, icon })),
 
   // ---------- pioneers ("Первооткрыватели"): friends who drop in now and then ----------
   // Auto ones reward what an occasional friend actually does (dropping in, coming back,
@@ -215,7 +320,11 @@ const q = {
   remove: db.prepare('DELETE FROM user_achievements WHERE user_id = ? AND code = ?'),
   addVoice: db.prepare('UPDATE users SET voice_seconds = voice_seconds + ? WHERE id = ?'),
   addStream: db.prepare('UPDATE users SET streams_count = streams_count + 1 WHERE id = ?'),
-  stats: db.prepare('SELECT voice_seconds, streams_count, is_admin FROM users WHERE id = ?'),
+  stats: db.prepare('SELECT voice_seconds, streams_count, is_admin, messages_count, images_count, stream_seconds FROM users WHERE id = ?'),
+  addMessage: db.prepare('UPDATE users SET messages_count = messages_count + 1, images_count = images_count + ? WHERE id = ?'),
+  addStreamTime: db.prepare('UPDATE users SET stream_seconds = stream_seconds + ? WHERE id = ?'),
+  ownedCount: db.prepare('SELECT COUNT(*) AS n FROM user_achievements WHERE user_id = ?'),
+
   setPinned: db.prepare('UPDATE users SET pinned = ? WHERE id = ?'),
   addGame: db.prepare(
     'INSERT INTO user_games (user_id, game, seconds) VALUES (?, ?, ?) ON CONFLICT(user_id, game) DO UPDATE SET seconds = seconds + excluded.seconds',
@@ -239,6 +348,63 @@ const q = {
   ),
   userCount: db.prepare('SELECT COUNT(*) AS n FROM users'),
 };
+
+let dmPartnersQuery: ReturnType<typeof db.prepare> | undefined;
+
+/** Current value of every counter (hours rounded down). */
+export function metricsOf(userId: string): Record<Metric, number> {
+  const row = q.stats.get(userId) as
+    | { voice_seconds: number; streams_count: number; messages_count: number; images_count: number; stream_seconds: number }
+    | undefined;
+  const games = q.gameTotals.get(userId) as { total: number; games: number; best: number };
+  const pairs = q.partners.get(userId, userId) as { n: number; best: number };
+  let dms = 0;
+  try {
+    // Prepared on first use: the chat tables are created by chat.ts, possibly after this module.
+    dmPartnersQuery ??= db.prepare("SELECT COUNT(DISTINCT conv) AS n FROM messages WHERE author = ? AND conv LIKE 'dm:%'");
+    dms = (dmPartnersQuery.get(userId) as { n: number }).n;
+  } catch {
+    // chat table not created yet on a very old database
+  }
+  return {
+    voiceH: Math.floor((row?.voice_seconds ?? 0) / HOUR),
+    gameH: Math.floor(games.total / HOUR),
+    streams: row?.streams_count ?? 0,
+    streamH: Math.floor((row?.stream_seconds ?? 0) / HOUR),
+    days: (q.days.all(userId) as unknown[]).length,
+    streak: currentStreak(userId),
+    nights: (q.nights.get(userId) as { n: number }).n,
+    games: games.games,
+    bestGameH: Math.floor(games.best / HOUR),
+    partners: pairs.n,
+    bestPairH: Math.floor(pairs.best / HOUR),
+    messages: row?.messages_count ?? 0,
+    images: row?.images_count ?? 0,
+    dms,
+    achievements: (q.ownedCount.get(userId) as { n: number }).n,
+    challenges: weekly.challengesDone(userId),
+    quests: weekly.questsDone(userId),
+    bets: fun.betsWon(userId),
+    predictions: fun.predictedRight(userId),
+  };
+}
+
+/** Awards every ladder step the user has reached (only the given counters, if listed). */
+export function checkSeries(userId: string, only?: Metric[]) {
+  const m = metricsOf(userId);
+  for (const step of SERIES) {
+    if (only && !only.includes(step.metric)) continue;
+    if (m[step.metric] >= step.target) award(userId, step.code);
+  }
+}
+
+/** A chat message was sent (counts toward the chat ladders). */
+export function messageSent(userId: string, withImage: boolean) {
+  q.addMessage.run(withImage ? 1 : 0, userId);
+  weekly.recordMessage(userId);
+  markActive(userId);
+  checkSeries(userId, ['messages', 'images', 'dms']);
+}
 
 /** Friends-only achievements go only to people who can see the section. */
 export function awardFriend(userId: string, code: string) {
@@ -276,7 +442,10 @@ export function award(userId: string, code: string): boolean {
   onAwarded(userId, code);
   // Chain rules that depend on other achievements.
   if (def.hidden) award(userId, 'first_secret');
-  if (prestigeOf(userId).tier >= 4) award(userId, 'first_singularity');
+  const prestige = prestigeOf(userId);
+  if (prestige.tier >= TIER_LEVELS.length - 1) award(userId, 'first_singularity');
+  if (prestige.level >= 50) award(userId, 'first_level_50');
+  if (def.category !== 'collection') checkSeries(userId, ['achievements']);
   return true;
 }
 
@@ -419,6 +588,33 @@ interface Session {
   aloneSince: number | null;
 }
 
+// ---------- AFK: an hour without speaking (or streaming / chatting) stops the clock ----------
+
+/** An hour by default; ECHO_AFK_MINUTES overrides it (handy for testing). */
+const AFK_AFTER = Number(process.env.ECHO_AFK_MINUTES ?? 60) * 60_000;
+/** Last moment each user spoke, streamed or wrote in chat. */
+const lastActive = new Map<string, number>();
+const afk = new Set<string>();
+let onAfkChange: (userId: string, isAfk: boolean) => void = () => {};
+export function setAfkListener(fn: (userId: string, isAfk: boolean) => void) {
+  onAfkChange = fn;
+}
+export const isAfk = (userId: string) => afk.has(userId);
+
+/** The user is clearly here (voice activity, a stream, a chat message). */
+export function markActive(userId: string) {
+  lastActive.set(userId, Date.now());
+  if (afk.delete(userId)) {
+    // Back from AFK: the "continuous session" timers start over.
+    const s = sessions.get(userId);
+    if (s) {
+      s.since = Date.now();
+      s.accounted = Date.now();
+    }
+    onAfkChange(userId, false);
+  }
+}
+
 /** Recent channel switches per user, for "hopper". */
 const switches = new Map<string, number[]>();
 
@@ -434,6 +630,8 @@ function checkVoiceTotals(userId: string) {
     award(userId, 'pioneer_100h');
   }
   if (voiceSeconds >= 500 * HOUR) award(userId, 'voice_500h');
+  if (voiceSeconds >= 1000 * HOUR) award(userId, 'first_1000h');
+  checkSeries(userId, ['voiceH', 'partners', 'bestPairH', 'days', 'streak', 'nights']);
 }
 
 export function voiceJoined(userId: string, room: string) {
@@ -442,6 +640,7 @@ export function voiceJoined(userId: string, room: string) {
   const prev = sessions.get(userId);
   if (prev && prev.room !== room) voiceLeft(userId, prev.room);
   if (!sessions.has(userId)) sessions.set(userId, { room, since: now, accounted: now, aloneSince: null });
+  if (!lastActive.has(userId) || !afk.has(userId)) lastActive.set(userId, now);
   award(userId, 'first_steps');
   const others = [...sessions].filter(([id, s]) => id !== userId && s.room === room).length;
   if (others >= 1) awardFriend(userId, 'p_drop_in');
@@ -460,25 +659,46 @@ export function voiceLeft(userId: string, room: string) {
   if (!s || s.room !== room) return;
   flush(userId, s, Date.now());
   sessions.delete(userId);
+  if (afk.delete(userId)) onAfkChange(userId, false);
 }
 
 function flush(userId: string, s: Session, now: number) {
-  const secs = Math.floor((now - s.accounted) / 1000);
+  const others = [...sessions].filter(([id, o]) => id !== userId && o.room === s.room).length;
+  // Silent for an hour: AFK. Time stops counting (no farming hours by sitting muted), but
+  // the "silence" achievements below still work.
+  if (!afk.has(userId) && now - (lastActive.get(userId) ?? s.since) >= AFK_AFTER) {
+    afk.add(userId);
+    if (others > 0) award(userId, 'silent_watcher');
+    onAfkChange(userId, true);
+  }
+  const away = afk.has(userId);
+  // Count up to the moment they went AFK (the hour of silence itself is still voice time),
+  // nothing after it.
+  const until = away ? Math.min(now, (lastActive.get(userId) ?? s.since) + AFK_AFTER) : now;
+  const secs = Math.max(0, Math.floor((until - s.accounted) / 1000));
   if (secs > 0) {
     q.addVoice.run(secs, userId);
+    weekly.recordVoice(
+      userId,
+      secs,
+      [...sessions].filter(([id, o]) => id !== userId && o.room === s.room).map(([id]) => id),
+    );
     s.accounted += secs * 1000;
     // Time together, counted from the side of the lower id so each pair is added once.
     for (const [otherId, other] of sessions) {
       if (otherId !== userId && other.room === s.room && userId < otherId) q.addPair.run(userId, otherId, secs);
     }
   }
+  // While AFK nothing more is banked: move the counter to now.
+  if (away) s.accounted = now;
   checkVoiceTotals(userId);
   checkSocial(userId);
-  if (now - s.since >= 4 * HOUR * 1000) award(userId, 'marathon');
-  if (now - s.since >= 2 * HOUR * 1000 && [...sessions].filter(([id, o]) => id !== userId && o.room === s.room).length >= 2) {
-    awardFriend(userId, 'p_game_night');
+  if (!away) {
+    if (now - s.since >= 2 * HOUR * 1000) award(userId, 'session_2h');
+    if (now - s.since >= 4 * HOUR * 1000) award(userId, 'marathon');
+    if (now - s.since >= 2 * HOUR * 1000 && others >= 2) awardFriend(userId, 'p_game_night');
+    if (now - s.since >= 8 * HOUR * 1000) award(userId, 'all_nighter');
   }
-  if (now - s.since >= 8 * HOUR * 1000) award(userId, 'all_nighter');
 
   const alone = ![...sessions].some(([id, other]) => id !== userId && other.room === s.room);
   if (!alone) s.aloneSince = null;
@@ -502,8 +722,11 @@ function checkSocial(userId: string) {
 // ---------- prestige: level and rank from achievement points ----------
 
 const POINTS: Record<Rarity, number> = { common: 10, rare: 30, epic: 75, legendary: 200, unique: 300 };
-/** Rank by level: Сигнал 1–4, Резонанс 5–8, Импульс 9–12, Квазар 13–16, Сингулярность 17+. */
-const TIER_LEVELS = [1, 5, 9, 13, 17];
+/**
+ * Ten ranks, one per five levels: Сигнал, Резонанс, Импульс, Плазма, Квазар, Пульсар,
+ * Магнетар, Сверхновая, Гиперновая, Сингулярность (45+).
+ */
+const TIER_LEVELS = [1, 5, 10, 15, 20, 25, 30, 35, 40, 45];
 
 export interface Prestige {
   points: number;
@@ -519,11 +742,22 @@ export interface Prestige {
   tierFloor: number;
 }
 
-/** Level L needs 10·(L−1)² points: 10 → 2, 90 → 4, 640 → 9, 2560 → 17. */
-const pointsForLevel = (level: number) => 10 * (level - 1) ** 2;
+/**
+ * Level L needs A·(L−1)^1.5 points. A is set so that collecting most of the automatic
+ * achievements (months of real activity) lands around level 50; early levels come fast.
+ */
+const LEVEL_A = 22;
+/** The top level. */
+export const MAX_LEVEL = 50;
+const LEVEL_B = 1.5;
+const pointsForLevel = (level: number) => Math.round(LEVEL_A * (level - 1) ** LEVEL_B);
 
 export function prestigeFromPoints(points: number): Prestige {
-  const level = 1 + Math.floor(Math.sqrt(points / 10));
+  let level = 1 + Math.floor((points / LEVEL_A) ** (1 / LEVEL_B) + 1e-9);
+  while (pointsForLevel(level + 1) <= points) level++;
+  while (level > 1 && pointsForLevel(level) > points) level--;
+  const maxed = level >= MAX_LEVEL;
+  if (maxed) level = MAX_LEVEL;
   let tier = 0;
   while (tier + 1 < TIER_LEVELS.length && level >= TIER_LEVELS[tier + 1]!) tier++;
   const nextTierLevel = TIER_LEVELS[tier + 1] ?? null;
@@ -532,7 +766,8 @@ export function prestigeFromPoints(points: number): Prestige {
     level,
     tier,
     levelFloor: pointsForLevel(level),
-    nextLevelAt: pointsForLevel(level + 1),
+    // At the top the ring stays full.
+    nextLevelAt: maxed ? pointsForLevel(level) : pointsForLevel(level + 1),
     nextTierLevel,
     nextTierAt: nextTierLevel ? pointsForLevel(nextTierLevel) : null,
     tierFloor: pointsForLevel(TIER_LEVELS[tier]!),
@@ -543,7 +778,7 @@ const allAwards = db.prepare('SELECT user_id, code FROM user_achievements');
 
 /** Everyone's prestige in one query (used for channel/presence snapshots). */
 export function prestigeMap(): Map<string, Prestige> {
-  const pts = new Map<string, number>();
+  const pts = new Map<string, number>(weekly.bonusPoints());
   for (const r of allAwards.all() as { user_id: string; code: string }[]) {
     const def = byCode.get(r.code);
     if (def) pts.set(r.user_id, (pts.get(r.user_id) ?? 0) + POINTS[def.rarity]);
@@ -587,6 +822,8 @@ function flushGame(userId: string, g: GameSession, now: number) {
   const secs = Math.floor((now - g.accounted) / 1000);
   if (secs > 0) {
     q.addGame.run(userId, g.game, secs);
+    const room = sessions.get(userId)?.room;
+    weekly.recordGame(userId, g.game, secs, !!room && [...sessions].some(([id, o]) => id !== userId && o.room === room));
     g.accounted += secs * 1000;
   }
   const { gameSeconds, gamesCount, bestGameSeconds } = getStats(userId);
@@ -596,6 +833,7 @@ function flushGame(userId: string, g: GameSession, now: number) {
   if (bestGameSeconds >= 100 * HOUR) award(userId, 'one_game_100h');
   checkCollection(userId, gamesCount);
   if (now - g.since >= 6 * HOUR * 1000) award(userId, 'session_6h');
+  checkSeries(userId, ['gameH', 'games', 'bestGameH']);
 }
 
 function checkCollection(userId: string, gamesCount: number) {
@@ -658,18 +896,25 @@ export function streamStarted(userId: string) {
   if (!queries.userById.get(userId)) return;
   q.addStream.run(userId);
   streams.set(userId, Date.now());
+  markActive(userId);
+  weekly.recordStreamStart(userId);
   award(userId, 'streamer');
   award(userId, 'first_stream_ever');
   const { streamsCount } = getStats(userId);
   if (streamsCount >= 10) award(userId, 'stream_10');
   if (streamsCount >= 50) award(userId, 'stream_50');
   if (streamsCount >= 200) award(userId, 'stream_200');
+  checkSeries(userId, ['streams']);
 }
 
 export function streamStopped(userId: string) {
   const since = streams.get(userId);
   streams.delete(userId);
-  if (since && Date.now() - since >= 3 * HOUR * 1000) award(userId, 'stream_3h');
+  if (!since) return;
+  q.addStreamTime.run(Math.floor((Date.now() - since) / 1000), userId);
+  weekly.recordStreamTime(userId, Math.floor((Date.now() - since) / 1000));
+  if (Date.now() - since >= 3 * HOUR * 1000) award(userId, 'stream_3h');
+  checkSeries(userId, ['streamH']);
 }
 
 export function syncAdmins() {
@@ -683,7 +928,10 @@ export function startAchievementClock() {
     const now = Date.now();
     for (const [id, s] of sessions) flush(id, s, now);
     for (const [id, g] of gameSessions) flushGame(id, g, now);
-    for (const [id, since] of streams) if (now - since >= 3 * HOUR * 1000) award(id, 'stream_3h');
+    for (const [id, since] of streams) {
+      markActive(id);
+      if (now - since >= 3 * HOUR * 1000) award(id, 'stream_3h');
+    }
   }, 60_000).unref();
 }
 
@@ -696,6 +944,13 @@ export interface Progress {
 }
 
 export function progressOf(userId: string): Record<string, Progress> {
+  const metrics = metricsOf(userId);
+  const ladder: Record<string, Progress> = {};
+  for (const step of SERIES) ladder[step.code] = { value: Math.min(metrics[step.metric], step.target), target: step.target, unit: step.unit };
+  return { ...progressBase(userId), ...ladder };
+}
+
+function progressBase(userId: string): Record<string, Progress> {
   const st = getStats(userId);
   const days = (q.days.all(userId) as unknown[]).length;
   const nights = (q.nights.get(userId) as { n: number }).n;

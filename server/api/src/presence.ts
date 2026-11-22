@@ -1,7 +1,10 @@
 import type { FastifyBaseLogger, FastifyReply } from 'fastify';
 import { ParticipantInfo_State, TrackSource, type WebhookEvent } from 'livekit-server-sdk';
-import { definition, gameChanged, getPinnedFromRow, prestigeFromPoints, prestigeMap, roomMembers, uniquesMap, setAwardListener, streamStarted, streamStopped, voiceJoined, voiceLeft } from './achievements.ts';
+import { definition, gameChanged, getPinnedFromRow, prestigeFromPoints, prestigeMap, roomMembers, uniquesMap, setAwardListener, setAfkListener, isAfk, streamStarted, streamStopped, voiceJoined, voiceLeft } from './achievements.ts';
 import { parseStatus, styleContext } from './cosmetics.ts';
+import * as weekly from './weekly.ts';
+import * as fun from './fun.ts';
+import { award, checkSeries } from './achievements.ts';
 import { queries, type Channel } from './db.ts';
 import { channelIdFromRoom, roomNameForChannel, roomService, toMember, type ChannelMember } from './livekit.ts';
 
@@ -41,6 +44,7 @@ export function channelsSnapshot() {
   const prestige = prestigeMap();
   const uniques = uniquesMap();
   const styles = styleContext();
+  const crowns = crownsOf();
   return channels.map((c) => ({
     id: c.id,
     name: c.name,
@@ -59,6 +63,8 @@ export function channelsSnapshot() {
             style: styles.resolve(m.id, profile.style),
             status: parseStatus(profile.status),
             muted: !!profile.muted_until && profile.muted_until > Date.now(),
+            afk: isAfk(m.id),
+            crowns: crowns(m.id),
           }
         : m;
     }),
@@ -85,6 +91,73 @@ setAwardListener((userId, code) => {
     broadcastPresence();
   });
 });
+
+/**
+ * AFK after an hour of silence: everyone sees the tag, the user gets a notice, and if the
+ * server has a channel called "AFK" they are moved there.
+ */
+setAfkListener((userId, on) => {
+  for (const reply of subscribers) if (reply.request.user?.id === userId) send(reply, 'afk', { on });
+  if (on) {
+    const afkChannel = (queries.listChannels.all() as unknown as Channel[]).find((c) => c.name.trim().toLowerCase() === 'afk');
+    const inIt = afkChannel && (members.get(afkChannel.id) ?? []).some((m) => m.id === userId);
+    if (afkChannel && !inIt) sendMove(userId, afkChannel.id, 'Echo');
+  }
+  queueMicrotask(() => {
+    broadcastChannels();
+    broadcastPresence();
+  });
+});
+
+/** Crowns of the evening as a lookup: user id -> ['talk' | 'stream']. */
+function crownsOf() {
+  const c = weekly.crowns();
+  return (id: string) => [c.talk === id ? 'talk' : null, c.stream === id ? 'stream' : null].filter(Boolean) as string[];
+}
+
+/**
+ * Weekly challenges and duo quests are checked whenever their counters move; finishing one
+ * pops a notice for the user (and the friend, for quests) and feeds the achievement ladders.
+ */
+let lastCrowns = '';
+weekly.setWeeklyListener((userId) => {
+  for (const code of weekly.checkChallenges(userId)) {
+    const c = weekly.challengesFor().find((x) => x.code === code);
+    for (const reply of subscribers) if (reply.request.user?.id === userId) send(reply, 'weekly', { type: 'challenge', title: c?.title ?? '' });
+    checkSeries(userId, ['challenges']);
+  }
+  for (const [a, b] of weekly.checkQuests(userId)) {
+    for (const id of [a, b]) {
+      for (const reply of subscribers) if (reply.request.user?.id === id) send(reply, 'weekly', { type: 'quest', with: id === a ? b : a });
+      checkSeries(id, ['quests']);
+    }
+  }
+  // Crowns change hands: let everyone see it.
+  const c = weekly.crowns();
+  const key = `${c.talk}|${c.stream}`;
+  if (key !== lastCrowns) {
+    lastCrowns = key;
+    queueMicrotask(() => {
+      broadcastChannels();
+      broadcastPresence();
+    });
+  }
+});
+void award;
+
+// Evening games: refresh everyone's panel; personal wins go to the winner (+ ladders).
+fun.setFunCounterListener((userId, kind) => checkSeries(userId, [kind]));
+fun.setFunListener((e) => {
+  if (e.type === 'changed') sendToUsers(null, 'fun', { type: 'changed' });
+  else if (e.type === 'bet-won') sendTo(e.userId, 'fun', { type: 'bet-won', amount: e.amount, question: e.question });
+  else if (e.type === 'predicted') sendTo(e.userId, 'fun', { type: 'predicted', kind: e.kind, amount: e.amount });
+  else funCapsule(e.capsule);
+});
+let funCapsule: (c: Parameters<typeof fun.capsuleText>[0]) => void = () => {};
+/** Routes deliver capsules (they own chat delivery). */
+export function setCapsuleDelivery(fn: typeof funCapsule) {
+  funCapsule = fn;
+}
 
 /** Asks one user's client to switch to another voice channel (admin drag & drop). */
 export function sendMove(userId: string, channelId: number, by: string) {
@@ -125,6 +198,7 @@ export function presenceSnapshot() {
   const prestige = prestigeMap();
   const uniques = uniquesMap();
   const styles = styleContext();
+  const crowns = crownsOf();
   const rows = queries.userProfiles.all() as {
     id: string;
     nickname: string;
@@ -152,6 +226,7 @@ export function presenceSnapshot() {
       style: styles.resolve(u.id, u.style),
       status: parseStatus(u.status),
       muted: !!u.muted_until && u.muted_until > Date.now(),
+      crowns: crowns(u.id),
     }))
     .sort((a, b) => a.nickname.localeCompare(b.nickname, 'ru'));
 }

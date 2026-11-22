@@ -5,6 +5,8 @@ import { z } from 'zod';
 import {
   award,
   awardFriend,
+  markActive,
+  messageSent,
   catalogFor,
   CATEGORIES,
   definition,
@@ -21,6 +23,8 @@ import {
   setPinned,
 } from './achievements.ts';
 import * as chat from './chat.ts';
+import * as weekly from './weekly.ts';
+import * as fun from './fun.ts';
 import { equip, GRANTABLE, parseGrants, parseStatus, setGrant, setStatus, SLOTS, styleContext, styleOf } from './cosmetics.ts';
 import { createInvite, HttpError, publicUser, redeemInvite, requireAdmin, requireStaff, requireUser } from './auth.ts';
 import {
@@ -53,6 +57,7 @@ import {
   sendTo,
   sendToUsers,
   setActivity,
+  setCapsuleDelivery,
   subscribe,
 } from './presence.ts';
 
@@ -90,6 +95,9 @@ function imageType(data: unknown): string | null {
 /** Admin and moderators always see the friends-only section; others need access. */
 const pioneerAccess = (u: User) => !!(u.is_admin || u.is_moderator || u.is_pioneer);
 
+/** Last counted "I'm talking" ping per user. */
+const lastTalk = new Map<string, number>();
+
 function getChannel(id: number): Channel {
   const channel = queries.channelById.get(id) as Channel | undefined;
   if (!channel) throw new HttpError(404, 'Канал не найден');
@@ -124,6 +132,39 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.get('/api/presence', { preHandler: requireUser }, async () => ({ users: presenceSnapshot() }));
 
+  // The client says "I'm talking" (voice activation fired) — keeps people out of AFK.
+  app.post('/api/me/voice-activity', { preHandler: requireUser }, async (req) => {
+    markActive(req.user.id);
+    // Talk time (for crowns, the heat map and challenges): at most one ping per 12 s counts.
+    const now = Date.now();
+    if (now - (lastTalk.get(req.user.id) ?? 0) >= 12_000) {
+      lastTalk.set(req.user.id, now);
+      weekly.recordTalk(req.user.id);
+    }
+    return { ok: true };
+  });
+
+  // ---------- weekly: challenges, duo quests, recap ----------
+
+  app.get('/api/weekly', { preHandler: requireUser }, async (req) => ({
+    challenges: weekly.challengeState(req.user.id),
+    quests: weekly.questsOf(req.user.id),
+  }));
+
+  app.post('/api/quests', { preHandler: requireUser }, async (req) => {
+    const body = parse(z.object({ friendId: z.string() }), req.body);
+    try {
+      return { quest: weekly.startQuest(req.user.id, body.friendId) };
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+  });
+
+  app.get('/api/recap', { preHandler: requireUser }, async (req) => {
+    const query = parse(z.object({ week: z.enum(['last', 'current']).default('last') }), req.query);
+    return { recap: weekly.recap(req.user.id, query.week === 'current' ? weekly.weekKey() : weekly.lastWeekKey()) };
+  });
+
   app.put('/api/me/activity', { preHandler: requireUser }, async (req) => {
     const body = parse(z.object({ game: z.string().trim().min(1).max(64).nullable() }), req.body);
     // Launchers and chat apps are not games (older clients could report them as custom games).
@@ -146,7 +187,8 @@ export async function registerRoutes(app: FastifyInstance) {
     // The full achievement list is private: only the owner (and staff, to give / take
     // achievements) gets it; everyone else sees just what the owner pinned to the profile.
     const isMe = id === req.user.id;
-    const full = isMe || rank(req.user) > 0;
+    // Admin sees everyone's; a moderator sees everyone's except the admin's.
+    const full = isMe || !!req.user.is_admin || (!!req.user.is_moderator && !user.is_admin);
     const pinned = getPinned(id);
     const visible = listAchievements(id)
       // Friends-only achievements stay invisible to viewers without access.
@@ -183,7 +225,7 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.patch('/api/me/style', { preHandler: requireUser }, async (req) => {
     const body = parse(
-      z.object({ ring: z.string(), frame: z.string(), name: z.string(), plate: z.string() }).partial(),
+      z.object({ ring: z.string(), frame: z.string(), name: z.string(), plate: z.string(), sound: z.string() }).partial(),
       req.body,
     );
     let style;
@@ -521,7 +563,7 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   // Admin opens (or closes) the friends-only "Первооткрыватели" tab and styles for someone.
-  app.post('/api/mod/:id/pioneer', { preHandler: requireAdmin }, async (req) => {
+  app.post('/api/mod/:id/pioneer', { preHandler: requireStaff }, async (req) => {
     const { id } = parse(z.object({ id: z.string() }), req.params);
     if (!queries.userById.get(id)) throw new HttpError(404, 'Пользователь не найден');
     const body = parse(z.object({ on: z.boolean() }), req.body);
@@ -565,6 +607,66 @@ export async function registerRoutes(app: FastifyInstance) {
     }
   };
 
+  // ---------- evening games: sparks, bets, predictions, time capsules ----------
+
+  setCapsuleDelivery(async (c) => {
+    const author = queries.userById.get(c.author) as User | undefined;
+    if (!author) return;
+    if (c.target.startsWith('ch:')) {
+      try {
+        const message = await chat.post(c.target, author, fun.capsuleText(c), null, null);
+        deliver(c.target, 'new', message);
+      } catch {
+        // channel gone: fall back to the author
+        sendTo(c.author, 'fun', { type: 'capsule', text: c.text, createdAt: c.created_at });
+      }
+    } else sendTo(c.target, 'fun', { type: 'capsule', text: c.text, createdAt: c.created_at });
+  });
+  const funTick = setInterval(() => {
+    try {
+      fun.openDueCapsules();
+      fun.resolvePredictions();
+    } catch (e) {
+      app.log.error(e, 'fun tick');
+    }
+  }, 30_000);
+  funTick.unref();
+  app.addHook('onClose', async () => clearInterval(funTick));
+
+  app.get('/api/fun', { preHandler: requireUser }, async (req) => ({
+    wallet: fun.wallet(req.user.id),
+    bets: fun.bets(req.user.id),
+    predictions: fun.predictionsState(req.user.id),
+    capsules: fun.capsulesOf(req.user.id),
+    richest: fun.richest(),
+  }));
+  app.post('/api/bets', { preHandler: requireUser }, async (req) => {
+    const body = parse(z.object({ question: z.string().max(200), options: z.array(z.string().max(80)).min(2).max(4) }), req.body);
+    return { id: await guard(() => fun.createBet(req.user.id, body.question, body.options)) };
+  });
+  app.post('/api/bets/:id/stake', { preHandler: requireUser }, async (req) => {
+    const { id } = parse(z.object({ id: z.coerce.number().int().positive() }), req.params);
+    const body = parse(z.object({ option: z.number().int().min(0), amount: z.number().int().positive() }), req.body);
+    await guard(() => fun.placeStake(req.user.id, id, body.option, body.amount));
+    return { ok: true };
+  });
+  app.post('/api/bets/:id/settle', { preHandler: requireUser }, async (req) => {
+    const { id } = parse(z.object({ id: z.coerce.number().int().positive() }), req.params);
+    const body = parse(z.object({ action: z.enum(['lock', 'resolve', 'cancel']), winner: z.number().int().min(0).optional() }), req.body);
+    await guard(() => fun.settleBet(req.user, id, body.action, body.winner));
+    return { ok: true };
+  });
+  app.post('/api/predictions', { preHandler: requireUser }, async (req) => {
+    const body = parse(z.object({ kind: z.enum(['talk', 'stream']), pick: z.string() }), req.body);
+    await guard(() => fun.predict(req.user.id, body.kind, body.pick));
+    return { ok: true };
+  });
+  app.post('/api/capsules', { preHandler: requireUser }, async (req) => {
+    const body = parse(z.object({ text: z.string(), target: z.string().max(120), openAt: z.number().int() }), req.body);
+    if (body.target !== 'me') access(body.target, req.user);
+    return { id: await guard(() => fun.sealCapsule(req.user.id, body.text, body.target, body.openAt)) };
+  });
+
   app.get('/api/chat/:conv', { preHandler: requireUser }, async (req) => {
     const conv = convParam(req);
     access(conv, req.user);
@@ -582,6 +684,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const message = await guard(() => chat.post(conv, req.user, body.text, body.replyTo, null));
     deliver(conv, 'new', message);
     awardFriend(req.user.id, 'p_first_word');
+    messageSent(req.user.id, false);
     return { message };
   });
 
@@ -606,6 +709,7 @@ export async function registerRoutes(app: FastifyInstance) {
       }),
     );
     deliver(conv, 'new', message);
+    messageSent(req.user.id, true);
     return { message };
   });
 
