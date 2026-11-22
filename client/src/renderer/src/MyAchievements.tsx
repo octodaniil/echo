@@ -3,13 +3,12 @@ import type { AchievementDef, Profile } from '../../shared/types';
 import { Badge, categories, RARITY_LABEL, useCatalog } from './Achievements';
 import { MAX_PINNED } from './AchievementsBoard';
 import { CloseIcon } from './icons';
-import { WeeklyPanel } from './Weekly';
 
 /**
  * «Мои ачивки»: what you have earned (pick up to three for your profile) and, below,
  * the ones you are closest to. Only you see this list; others see the pinned ones.
  */
-export function MyAchievementsView({ meId, onClose, nameOf }: { meId: string; onClose: () => void; nameOf: (id: string) => string }) {
+export function MyAchievementsView({ meId, onClose }: { meId: string; onClose: () => void }) {
   const baseCatalog = useCatalog();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,8 +87,6 @@ export function MyAchievementsView({ meId, onClose, nameOf }: { meId: string; on
             <p class="muted">{error ?? 'Загружаем…'}</p>
           ) : (
             <>
-              <WeeklyPanel nameOf={nameOf} />
-              <div class="cosmetic-group">ПОЛУЧЕННЫЕ АЧИВКИ</div>
               <p class="muted tiny">
                 Нажми на ачивку, чтобы показать её в профиле (до {MAX_PINNED}). Остальные видишь только ты.
               </p>

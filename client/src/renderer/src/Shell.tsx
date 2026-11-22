@@ -716,7 +716,7 @@ export function Main({
           onToast={(m) => showToast(m)}
         />
       )}
-      {showMyAch && <MyAchievementsView meId={me.id} nameOf={nameOf} onClose={() => setShowMyAch(false)} />}
+      {showMyAch && <MyAchievementsView meId={me.id} onClose={() => setShowMyAch(false)} />}
       {recap && <RecapView which={recap} onClose={() => setRecap(null)} />}
       {showFun && (
         <FunView
@@ -746,6 +746,7 @@ export function Main({
           activity={profiles.get(profileId)?.activity ?? null}
           onClose={() => setProfileId(null)}
           onMessage={profileId !== me.id ? () => openDm(profileId) : undefined}
+          nameOf={nameOf}
           onMyAchievements={() => {
             setProfileId(null);
             setShowMyAch(true);

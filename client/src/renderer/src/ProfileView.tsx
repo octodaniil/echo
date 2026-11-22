@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import type { AchievementDef, Activity, Profile } from '../../shared/types';
 import { Badge, UniqueTitles, useCatalog } from './Achievements';
 import { AchievementsBoard, MAX_PINNED } from './AchievementsBoard';
+import { WeeklyPanel } from './Weekly';
 import { levelProgress, lookVars, RANK_NAMES } from './look';
 import { StatusLine } from './Status';
 import { GameCover } from './GameCover';
@@ -29,6 +30,7 @@ export function ProfileView({
   onClose,
   onMessage,
   onMyAchievements,
+  nameOf,
 }: {
   userId: string;
   meId: string;
@@ -42,6 +44,8 @@ export function ProfileView({
   onMessage?: () => void;
   /** Own profile: open «Мои ачивки». */
   onMyAchievements?: () => void;
+  /** Names for duo-quest partners (own profile). */
+  nameOf?: (id: string) => string;
 }) {
   const baseCatalog = useCatalog();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -128,7 +132,7 @@ export function ProfileView({
                         try {
                           await window.echo.startQuest(userId);
                           setError(null);
-                          setQuestMsg('Квест начат — смотри в «Мои ачивки»');
+                          setQuestMsg('Квест начат — прогресс в твоём профиле');
                         } catch (e) {
                           setQuestMsg((e as Error).message);
                         }
@@ -245,6 +249,16 @@ export function ProfileView({
                     </div>
                   ))}
                 </div>
+              </section>
+            )}
+
+            {isMe && (
+              <section class="profile-section">
+                <div class="profile-section-head">
+                  <h3>Неделя</h3>
+                  <small class="muted">Испытания и квесты видишь только ты</small>
+                </div>
+                <WeeklyPanel nameOf={nameOf ?? (() => 'друг')} />
               </section>
             )}
 
