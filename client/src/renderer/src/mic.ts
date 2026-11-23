@@ -312,7 +312,6 @@ export class MicPipeline {
     const kind = processorOf(s.noiseSuppression);
     // Dry mix only under a neural suppressor; 'max' keeps it smaller.
     if (kind !== 'none') this.source.connect(this.dryDelay);
-    this.tune(s);
     if (kind === 'dfn' && !this.dfnBroken) {
       try {
         const node = await createDeepFilter(this.ctx);
@@ -330,6 +329,7 @@ export class MicPipeline {
         this.dfn = node;
         this.dfnBeat = performance.now();
         this.source.connect(node).connect(this.inputGain);
+        this.tune(s);
         return;
       } catch (err) {
         console.warn('[mic] DeepFilterNet failed', err);
@@ -343,13 +343,18 @@ export class MicPipeline {
     } else {
       this.source.connect(this.inputGain);
     }
+    this.tune(s);
   }
 
   /** Dry mix and look-ahead for the current mode (no rewiring needed). */
   private tune(s: Settings) {
     const kind = processorOf(s.noiseSuppression);
-    this.dryDelay.delayTime.value = kind === 'dfn' ? 0.018 : 0.01;
-    this.dryGain.gain.value = kind === 'none' ? 0 : s.noiseSuppression === 'max' ? 0.06 : 0.12;
+    // The dry copy must line up with the suppressor's output to the sample, or the two add up
+    // as a comb filter ("talking from a barrel"). RNNoise's worklet delays by exactly 992
+    // samples (measured). DeepFilterNet mixes the untouched signal itself, inside its STFT
+    // (attenuation limit), which is aligned by construction, so no outside copy is added.
+    this.dryDelay.delayTime.value = RNNOISE_DELAY_S;
+    this.dryGain.gain.value = this.rnnoise ? (s.noiseSuppression === 'max' ? 0.06 : 0.12) : 0;
     // Look-ahead: a gate that fully closes needs time to open before the first syllable;
     // the continuous mode (neural suppressor + auto) never closes, so it barely needs any.
     this.lookahead.delayTime.value = kind !== 'none' && s.sensitivityAuto ? 0.03 : 0.12;
@@ -487,6 +492,11 @@ export class MicPipeline {
 
 // 'max' stacks both: WebRTC NS handles steady hum/fans, RNNoise handles clicks and bursts.
 const usesBrowserNs = (m: NoiseSuppressionMode) => m === 'standard' || m === 'max';
+/** RNNoise worklet latency: 992 samples at 48 kHz (measured offline, constant). */
+const RNNOISE_DELAY_S = 992 / 48_000;
+/** DeepFilterNet attenuation limit (dB): its own, phase-aligned dry mix. */
+const DFN_ATTEN_DB = 20;
+
 /** Which neural suppressor runs in our graph for this mode. */
 const processorOf = (m: NoiseSuppressionMode) => (m === 'dfn' ? 'dfn' : m === 'ai' || m === 'max' ? 'rnnoise' : 'none');
 
@@ -522,7 +532,9 @@ async function createDeepFilter(ctx: AudioContext): Promise<AudioWorkletNode> {
     channelCountMode: 'explicit',
     channelInterpretation: 'discrete',
     // The model is copied per node; the compiled module is shared.
-    processorOptions: { module: assets.module, model: assets.model.slice(0), attenLim: 100 },
+    // 20 dB attenuation limit: noise is cut by 20 dB at most, which also means a syllable
+    // the model takes for noise is softened (to 10%) instead of erased.
+    processorOptions: { module: assets.module, model: assets.model.slice(0), attenLim: DFN_ATTEN_DB },
   });
 }
 

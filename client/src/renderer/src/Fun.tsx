@@ -280,7 +280,7 @@ function Predictions({ state, people, run }: { state: FunState; people: { id: st
         <div key={k.id} class="predict">
           <div class="bet-head">
             <b>
-              <span class={`crown-tag ${k.id}`}>
+              <span class={`crown-tag crown-${k.id}`}>
                 <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M3 18h18L19 7l-4.5 4L12 4 9.5 11 5 7Z" fill="currentColor" />
                 </svg>

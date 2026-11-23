@@ -834,10 +834,10 @@
   place-items: center;
   animation: crown-bob 2.6s ease-in-out infinite;
 }
-.crown-tag.talk {
+.crown-tag.crown-talk {
   filter: drop-shadow(0 0 4px rgba(255, 207, 74, 0.7));
 }
-.crown-tag.stream {
+.crown-tag.crown-stream {
   filter: drop-shadow(0 0 4px rgba(255, 92, 174, 0.7));
 }
 .recap-modal {
@@ -1134,10 +1134,10 @@
   position: relative;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
 }
-.tile-crown.talk .crown-svg {
+.tile-crown.crown-talk .crown-svg {
   filter: drop-shadow(0 0 8px rgba(255, 207, 74, 0.75)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
 }
-.tile-crown.stream .crown-svg {
+.tile-crown.crown-stream .crown-svg {
   filter: drop-shadow(0 0 8px rgba(255, 92, 174, 0.75)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
 }
 .tile-crown-glow {
@@ -1151,10 +1151,10 @@
   opacity: 0.55;
   animation: crown-glow 3.2s ease-in-out infinite;
 }
-.tile-crown.talk .tile-crown-glow {
+.tile-crown.crown-talk .tile-crown-glow {
   background: #ffcf4a;
 }
-.tile-crown.stream .tile-crown-glow {
+.tile-crown.crown-stream .tile-crown-glow {
   background: #ff5cae;
 }
 .tile-crown-label {
@@ -1166,11 +1166,11 @@
   white-space: nowrap;
   clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
 }
-.tile-crown.talk .tile-crown-label {
+.tile-crown.crown-talk .tile-crown-label {
   color: #2a1a00;
   background: linear-gradient(90deg, #c7851a, #ffe08a 50%, #c7851a);
 }
-.tile-crown.stream .tile-crown-label {
+.tile-crown.crown-stream .tile-crown-label {
   color: #fff;
   background: linear-gradient(90deg, #9b2bd8, #ff5cae 50%, #9b2bd8);
 }
@@ -1344,14 +1344,14 @@
   overflow: visible;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
 }
-.big-crown.talk .big-crown-svg {
-  filter: drop-shadow(0 0 10px rgba(255, 207, 74, 0.6)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
+.big-crown.crown-talk .big-crown-svg {
+  filter: drop-shadow(0 0 3px rgba(255, 207, 74, 0.45)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
 }
-.big-crown.stream .big-crown-svg {
-  filter: drop-shadow(0 0 10px rgba(255, 92, 174, 0.6)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
+.big-crown.crown-stream .big-crown-svg {
+  filter: drop-shadow(0 0 3px rgba(255, 92, 174, 0.45)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
 }
-.big-crown.both .big-crown-svg {
-  filter: drop-shadow(0 0 10px rgba(255, 150, 110, 0.6)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
+.big-crown.crown-both .big-crown-svg {
+  filter: drop-shadow(0 0 3px rgba(255, 150, 110, 0.45)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
 }
 .big-crown-glow {
   position: absolute;
@@ -1363,13 +1363,13 @@
   filter: blur(18px);
   animation: crown-glow 3.4s ease-in-out infinite;
 }
-.big-crown.talk .big-crown-glow {
+.big-crown.crown-talk .big-crown-glow {
   background: rgba(255, 207, 74, 0.55);
 }
-.big-crown.stream .big-crown-glow {
+.big-crown.crown-stream .big-crown-glow {
   background: rgba(255, 92, 174, 0.55);
 }
-.big-crown.both .big-crown-glow {
+.big-crown.crown-both .big-crown-glow {
   background: rgba(255, 150, 110, 0.55);
 }
 .big-crown-label {
@@ -1387,11 +1387,11 @@
   color: #2a1700;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
-.big-crown.stream .big-crown-label {
+.big-crown.crown-stream .big-crown-label {
   color: #fff;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
 }
-.big-crown.both .big-crown-label {
+.big-crown.crown-both .big-crown-label {
   font-size: 7.5px;
   letter-spacing: 0.08em;
 }

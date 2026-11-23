@@ -271,8 +271,7 @@ export function TileCrowns({ crowns }: { crowns: string[] | undefined }) {
   const label = both ? 'КОРОЛЬ БОЛТОВНИ · ЗВЕЗДА ЭФИРА' : kind === 'talk' ? 'КОРОЛЬ БОЛТОВНИ' : 'ЗВЕЗДА ЭФИРА';
   const outline = 'M6 92 L2 26 L40 62 L66 8 L100 54 L134 8 L160 62 L198 26 L194 92 Z';
   return (
-    <div class={`big-crown ${kind}`} title={crowns.map((c) => CROWN_TITLE[c]).join('\n')}>
-      <span class="big-crown-glow" aria-hidden="true" />
+    <div class={`big-crown crown-${kind}`} title={crowns.map((c) => CROWN_TITLE[c]).join('\n')}>
       <svg class="big-crown-svg" viewBox="0 0 200 110" preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id={`${g}-body`} x1="0" y1="0" x2="0" y2="1">
@@ -323,7 +322,7 @@ export function Crowns({ crowns }: { crowns: string[] | undefined }) {
   return (
     <>
       {crowns.map((c) => (
-        <span key={c} class={`crown-tag ${c}`} title={CROWN_TITLE[c]}>
+        <span key={c} class={`crown-tag crown-${c}`} title={CROWN_TITLE[c]}>
           <CrownSvg kind={c} size={16} />
         </span>
       ))}
