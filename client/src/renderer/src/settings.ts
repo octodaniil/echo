@@ -1,6 +1,6 @@
 // Per-device preferences. Kept in localStorage (Electron persists it to the profile folder).
 
-export type NoiseSuppressionMode = 'off' | 'standard' | 'ai' | 'max';
+export type NoiseSuppressionMode = 'off' | 'standard' | 'ai' | 'max' | 'dfn';
 
 export interface Settings {
   inputDeviceId: string;
@@ -54,7 +54,7 @@ export const defaults: Settings = {
   outputDeviceId: 'default',
   inputVolume: 1,
   outputVolume: 1,
-  noiseSuppression: 'ai',
+  noiseSuppression: 'dfn',
   echoCancellation: true,
   autoGain: true,
   sensitivityAuto: true,
@@ -80,7 +80,15 @@ const KEY = 'echo.settings.v1';
 function load(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? { ...defaults, ...(JSON.parse(raw) as Partial<Settings>) } : { ...defaults };
+    if (!raw) return { ...defaults };
+    const saved = JSON.parse(raw) as Partial<Settings> & { dfnMigrated?: boolean };
+    // 1.1.0: everyone on the old AI suppressor moves to «ИИ-шумодав 2.0» once (they can switch back).
+    if (!saved.dfnMigrated) {
+      if (saved.noiseSuppression === 'ai') saved.noiseSuppression = 'dfn';
+      saved.dfnMigrated = true;
+      localStorage.setItem(KEY, JSON.stringify(saved));
+    }
+    return { ...defaults, ...saved };
   } catch {
     return { ...defaults };
   }

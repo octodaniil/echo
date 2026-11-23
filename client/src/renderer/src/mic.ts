@@ -2,6 +2,9 @@ import { loadRnnoise, RnnoiseWorkletNode } from '@sapphi-red/web-noise-suppresso
 import rnnoiseWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url';
 import rnnoiseSimdWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url';
 import rnnoiseWorkletUrl from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url';
+import dfnWasmUrl from './dfn/df_bg.wasm?url';
+import dfnModelUrl from './dfn/DeepFilterNet3_onnx.tar.gz?url';
+import dfnWorkletUrl from './dfn/dfnWorklet.js?url';
 import type { NoiseSuppressionMode, Settings } from './settings';
 
 /**
@@ -49,6 +52,9 @@ export class MicPipeline {
   private stream: MediaStream | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
   private rnnoise: RnnoiseWorkletNode | null = null;
+  private dfn: AudioWorkletNode | null = null;
+  /** DeepFilterNet failed this session: «ИИ-шумодав 2.0» falls back to RNNoise. */
+  private dfnBroken = false;
   private applied: Settings | null = null;
   private timer: number | undefined;
 
@@ -173,7 +179,7 @@ export class MicPipeline {
       prev.echoCancellation !== s.echoCancellation ||
       prev.autoGain !== s.autoGain ||
       usesBrowserNs(prev.noiseSuppression) !== usesBrowserNs(s.noiseSuppression);
-    const needRewire = needNewStream || usesRnnoise(prev.noiseSuppression) !== usesRnnoise(s.noiseSuppression);
+    const needRewire = needNewStream || processorOf(prev.noiseSuppression) !== processorOf(s.noiseSuppression);
 
     if (needNewStream) {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -254,10 +260,32 @@ export class MicPipeline {
     this.rnnoise?.disconnect();
     this.rnnoise?.destroy();
     this.rnnoise = null;
+    this.dfn?.disconnect();
+    this.dfn?.port.close();
+    this.dfn = null;
 
     this.source = this.ctx.createMediaStreamSource(this.stream!);
     this.source.connect(this.rawAnalyser);
-    if (usesRnnoise(s.noiseSuppression)) {
+    const kind = processorOf(s.noiseSuppression);
+    if (kind === 'dfn' && !this.dfnBroken) {
+      try {
+        const node = await createDeepFilter(this.ctx);
+        node.port.onmessage = (e: MessageEvent<{ type: string; reason?: string }>) => {
+          if (e.data?.type !== 'error' || this.dfn !== node) return;
+          this.dfnBroken = true;
+          this.note(`ИИ-шумодав 2.0 сломался (${e.data.reason}) — включён обычный ИИ-шумодав`);
+          void this.rewire(this.applied ?? s);
+        };
+        this.dfn = node;
+        this.source.connect(node).connect(this.inputGain);
+        return;
+      } catch (err) {
+        console.warn('[mic] DeepFilterNet failed', err);
+        this.dfnBroken = true;
+        this.note('ИИ-шумодав 2.0 не запустился — включён обычный ИИ-шумодав');
+      }
+    }
+    if (kind === 'rnnoise' || kind === 'dfn') {
       this.rnnoise = await createRnnoise(this.ctx);
       this.source.connect(this.rnnoise).connect(this.inputGain);
     } else {
@@ -359,6 +387,7 @@ export class MicPipeline {
     clearInterval(this.timer);
     this.stream?.getTracks().forEach((t) => t.stop());
     this.rnnoise?.destroy();
+    this.dfn?.port.close();
     this.gateListeners.clear();
     this.levelListeners.clear();
     await this.ctx.close();
@@ -367,7 +396,44 @@ export class MicPipeline {
 
 // 'max' stacks both: WebRTC NS handles steady hum/fans, RNNoise handles clicks and bursts.
 const usesBrowserNs = (m: NoiseSuppressionMode) => m === 'standard' || m === 'max';
-const usesRnnoise = (m: NoiseSuppressionMode) => m === 'ai' || m === 'max';
+/** Which neural suppressor runs in our graph for this mode. */
+const processorOf = (m: NoiseSuppressionMode) => (m === 'dfn' ? 'dfn' : m === 'ai' || m === 'max' ? 'rnnoise' : 'none');
+
+let dfnAssets: Promise<{ module: WebAssembly.Module; model: ArrayBuffer }> | null = null;
+const dfnLoaded = new WeakSet<AudioContext>();
+
+/**
+ * DeepFilterNet 3 (built from the official source, see dfn/README.md): a stronger neural
+ * suppressor than RNNoise — removes keyboard, fans, room echo while keeping the voice full.
+ * About 0.5 ms of CPU per 10 ms of audio; adds ~10 ms of latency.
+ */
+async function createDeepFilter(ctx: AudioContext): Promise<AudioWorkletNode> {
+  dfnAssets ??= (async () => {
+    const [wasm, model] = await Promise.all([
+      fetch(dfnWasmUrl).then((r) => r.arrayBuffer()),
+      fetch(dfnModelUrl).then((r) => r.arrayBuffer()),
+    ]);
+    return { module: await WebAssembly.compile(wasm), model };
+  })();
+  const assets = await dfnAssets.catch((err) => {
+    dfnAssets = null;
+    throw err;
+  });
+  if (!dfnLoaded.has(ctx)) {
+    await ctx.audioWorklet.addModule(dfnWorkletUrl);
+    dfnLoaded.add(ctx);
+  }
+  return new AudioWorkletNode(ctx, 'echo-deepfilter', {
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    outputChannelCount: [1],
+    channelCount: 1,
+    channelCountMode: 'explicit',
+    channelInterpretation: 'discrete',
+    // The model is copied per node; the compiled module is shared.
+    processorOptions: { module: assets.module, model: assets.model.slice(0), attenLim: 100 },
+  });
+}
 
 let rnnoiseBinary: Promise<ArrayBuffer> | null = null;
 const workletLoaded = new WeakSet<AudioContext>();

@@ -126,6 +126,11 @@ const deviceLabel = (d: MediaDeviceInfo) =>
   d.deviceId === 'default' ? `По умолчанию (${d.label.replace(/^Default - |^По умолчанию - /, '')})` : d.label || 'Устройство';
 
 const NS_OPTIONS: { value: NoiseSuppressionMode; title: string; hint: string }[] = [
+  {
+    value: 'dfn',
+    title: 'ИИ-шумодав 2.0',
+    hint: 'Нейросеть DeepFilterNet 3 — как в Discord: убирает клавиатуру, вентиляторы, эхо комнаты и оставляет голос чистым и полным.',
+  },
   { value: 'max', title: 'Максимальный', hint: 'ИИ-шумодав + шумодав WebRTC вместе. Если друзья слышат фон, клавиатуру или вентилятор — включи этот.' },
   { value: 'ai', title: 'ИИ-шумодав', hint: 'Нейросеть RNNoise убирает клавиатуру, вентиляторы и фон. Чуть больше нагрузка на CPU.' },
   { value: 'standard', title: 'Стандартный', hint: 'Встроенное шумоподавление WebRTC. Легче, но хуже с резкими звуками.' },
