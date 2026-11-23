@@ -214,20 +214,117 @@ export function RecapView({ which, onClose }: { which: 'last' | 'current'; onClo
   );
 }
 
-/** Crown next to a nickname: who talked / streamed the most tonight. */
+const CROWN_TITLE: Record<string, string> = {
+  talk: 'Король болтовни — больше всех говорил за вечер',
+  stream: 'Звезда эфира — дольше всех стримил за вечер',
+};
+const CROWN_LABEL: Record<string, string> = { talk: 'КОРОЛЬ БОЛТОВНИ', stream: 'ЗВЕЗДА ЭФИРА' };
+
+/** The crown drawing: gradient body, jewels, and a shine that sweeps across. */
+function CrownSvg({ kind, size }: { kind: string; size: number }) {
+  const g = `crown-${kind}`;
+  return (
+    <svg class="crown-svg" width={size} height={Math.round(size * 0.72)} viewBox="0 0 50 36" aria-hidden="true">
+      <defs>
+        <linearGradient id={`${g}-body`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color={kind === 'talk' ? '#fff3c4' : '#ffd0ec'} />
+          <stop offset="0.45" stop-color={kind === 'talk' ? '#ffcf4a' : '#ff5cae'} />
+          <stop offset="1" stop-color={kind === 'talk' ? '#c7851a' : '#9b2bd8'} />
+        </linearGradient>
+        <linearGradient id={`${g}-shine`} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#fff" stop-opacity="0" />
+          <stop offset="0.5" stop-color="#fff" stop-opacity="0.85" />
+          <stop offset="1" stop-color="#fff" stop-opacity="0" />
+        </linearGradient>
+        <clipPath id={`${g}-clip`}>
+          <path d="M4 30 L2 9 L14 18 L25 3 L36 18 L48 9 L46 30 Z" />
+        </clipPath>
+      </defs>
+      <path d="M4 30 L2 9 L14 18 L25 3 L36 18 L48 9 L46 30 Z" fill={`url(#${g}-body)`} stroke="rgba(0,0,0,.35)" stroke-width="1" />
+      <rect x="4" y="27" width="42" height="5" rx="1.5" fill={`url(#${g}-body)`} stroke="rgba(0,0,0,.35)" stroke-width="1" />
+      <g clip-path={`url(#${g}-clip)`}>
+        <rect class="crown-shine" x="-20" y="0" width="16" height="36" fill={`url(#${g}-shine)`} />
+      </g>
+      <circle cx="25" cy="3.5" r="2.6" class="crown-jewel" fill={kind === 'talk' ? '#5cf2ff' : '#7dffb8'} />
+      <circle cx="2.5" cy="9" r="2" fill="#fff" opacity=".9" />
+      <circle cx="47.5" cy="9" r="2" fill="#fff" opacity=".9" />
+      <circle cx="25" cy="22" r="2.4" fill={kind === 'talk' ? '#ff4d6d' : '#5cf2ff'} />
+    </svg>
+  );
+}
+
+/**
+ * The crown of the evening standing on top of a call tile: as wide as the card, its band
+ * resting on the card's top edge. Both crowns at once = a gold-and-pink crown.
+ */
+export function TileCrowns({ crowns }: { crowns: string[] | undefined }) {
+  if (!crowns?.length) return null;
+  const both = crowns.length > 1;
+  const kind = both ? 'both' : crowns[0]!;
+  const g = `big-crown-${kind}`;
+  const stops: Record<string, [string, string, string]> = {
+    talk: ['#fff6cf', '#ffcf4a', '#b97512'],
+    stream: ['#ffd6ee', '#ff5cae', '#8e25c9'],
+    both: ['#fff6cf', '#ffb347', '#d63fa0'],
+  };
+  const [top, mid, low] = stops[kind] ?? stops.talk;
+  const label = both ? 'КОРОЛЬ БОЛТОВНИ · ЗВЕЗДА ЭФИРА' : kind === 'talk' ? 'КОРОЛЬ БОЛТОВНИ' : 'ЗВЕЗДА ЭФИРА';
+  const outline = 'M6 92 L2 26 L40 62 L66 8 L100 54 L134 8 L160 62 L198 26 L194 92 Z';
+  return (
+    <div class={`big-crown ${kind}`} title={crowns.map((c) => CROWN_TITLE[c]).join('\n')}>
+      <span class="big-crown-glow" aria-hidden="true" />
+      <svg class="big-crown-svg" viewBox="0 0 200 110" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id={`${g}-body`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color={top} />
+            <stop offset="0.5" stop-color={mid} />
+            <stop offset="1" stop-color={low} />
+          </linearGradient>
+          <linearGradient id={`${g}-band`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color={low} />
+            <stop offset="0.5" stop-color={top} />
+            <stop offset="1" stop-color={low} />
+          </linearGradient>
+          <linearGradient id={`${g}-shine`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#fff" stop-opacity="0" />
+            <stop offset="0.5" stop-color="#fff" stop-opacity="0.75" />
+            <stop offset="1" stop-color="#fff" stop-opacity="0" />
+          </linearGradient>
+          <clipPath id={`${g}-clip`}>
+            <path d={outline} />
+          </clipPath>
+        </defs>
+        <path d={outline} fill={`url(#${g}-body)`} stroke="rgba(0,0,0,.45)" stroke-width="1.5" stroke-linejoin="round" />
+        {/* inner engraving */}
+        <path d="M14 84 L12 44 L42 72 L66 28 L100 68 L134 28 L158 72 L188 44 L186 84" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.2" />
+        <g clip-path={`url(#${g}-clip)`}>
+          <rect class="big-crown-shine" x="-60" y="0" width="40" height="110" fill={`url(#${g}-shine)`} />
+        </g>
+        {/* band resting on the card */}
+        <rect x="0" y="88" width="200" height="20" rx="3" fill={`url(#${g}-band)`} stroke="rgba(0,0,0,.45)" stroke-width="1.5" />
+        {/* jewels on the tips and the middle */}
+        <circle class="big-crown-jewel j1" cx="66" cy="9" r="5" fill="#5cf2ff" />
+        <circle class="big-crown-jewel j2" cx="134" cy="9" r="5" fill="#7dffb8" />
+        <circle cx="2" cy="26" r="3.5" fill="#fff" />
+        <circle cx="198" cy="26" r="3.5" fill="#fff" />
+        <path class="big-crown-jewel j3" d="M100 58 l7 10 -7 10 -7 -10 z" fill="#ff4d6d" stroke="#fff" stroke-width="1" />
+      </svg>
+      <span class="big-crown-label mono">{label}</span>
+      <span class="tile-crown-spark s1" aria-hidden="true" />
+      <span class="tile-crown-spark s2" aria-hidden="true" />
+      <span class="tile-crown-spark s3" aria-hidden="true" />
+    </div>
+  );
+}
+
+/** Crown next to a nickname (lists, hover cards): who talked / streamed the most tonight. */
 export function Crowns({ crowns }: { crowns: string[] | undefined }) {
   if (!crowns?.length) return null;
   return (
     <>
       {crowns.map((c) => (
-        <span
-          key={c}
-          class={`crown-tag ${c}`}
-          title={c === 'talk' ? 'Король болтовни — больше всех говорил за вечер' : 'Звезда эфира — дольше всех стримил за вечер'}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3 18h18L19 7l-4.5 4L12 4 9.5 11 5 7Z" fill="currentColor" />
-          </svg>
+        <span key={c} class={`crown-tag ${c}`} title={CROWN_TITLE[c]}>
+          <CrownSvg kind={c} size={16} />
         </span>
       ))}
     </>

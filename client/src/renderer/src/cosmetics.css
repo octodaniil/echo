@@ -832,15 +832,13 @@
   flex-shrink: 0;
   display: inline-grid;
   place-items: center;
-  width: 17px;
-  height: 15px;
-  filter: drop-shadow(0 0 4px currentColor);
+  animation: crown-bob 2.6s ease-in-out infinite;
 }
 .crown-tag.talk {
-  color: #ffd678;
+  filter: drop-shadow(0 0 4px rgba(255, 207, 74, 0.7));
 }
 .crown-tag.stream {
-  color: #ff5c9a;
+  filter: drop-shadow(0 0 4px rgba(255, 92, 174, 0.7));
 }
 .recap-modal {
   width: min(780px, calc(100vw - 48px));
@@ -1111,4 +1109,352 @@
 }
 .predict .crown-tag {
   filter: none;
+}
+
+
+/* ---------- crowns of the evening on call tiles ---------- */
+.tile-crowns {
+  position: absolute;
+  top: 8px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  z-index: 3;
+}
+.tile-crown {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  animation: crown-float 3.2s ease-in-out infinite;
+}
+.tile-crown .crown-svg {
+  position: relative;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+}
+.tile-crown.talk .crown-svg {
+  filter: drop-shadow(0 0 8px rgba(255, 207, 74, 0.75)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+}
+.tile-crown.stream .crown-svg {
+  filter: drop-shadow(0 0 8px rgba(255, 92, 174, 0.75)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+}
+.tile-crown-glow {
+  position: absolute;
+  left: -6px;
+  top: -8px;
+  width: 44px;
+  height: 34px;
+  border-radius: 50%;
+  filter: blur(10px);
+  opacity: 0.55;
+  animation: crown-glow 3.2s ease-in-out infinite;
+}
+.tile-crown.talk .tile-crown-glow {
+  background: #ffcf4a;
+}
+.tile-crown.stream .tile-crown-glow {
+  background: #ff5cae;
+}
+.tile-crown-label {
+  position: relative;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  padding: 2px 7px;
+  white-space: nowrap;
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+}
+.tile-crown.talk .tile-crown-label {
+  color: #2a1a00;
+  background: linear-gradient(90deg, #c7851a, #ffe08a 50%, #c7851a);
+}
+.tile-crown.stream .tile-crown-label {
+  color: #fff;
+  background: linear-gradient(90deg, #9b2bd8, #ff5cae 50%, #9b2bd8);
+}
+.crown-shine {
+  animation: crown-shine 3.6s ease-in-out infinite;
+}
+.crown-jewel {
+  animation: crown-jewel 1.8s ease-in-out infinite;
+  transform-origin: 25px 3.5px;
+}
+.tile-crown-spark {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: #fff;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  opacity: 0;
+  animation: crown-spark 2.4s ease-in-out infinite;
+}
+.tile-crown-spark.s1 {
+  top: -2px;
+  left: -6px;
+}
+.tile-crown-spark.s2 {
+  top: 6px;
+  right: -8px;
+  animation-delay: 0.8s;
+}
+.tile-crown-spark.s3 {
+  top: -8px;
+  left: 60%;
+  animation-delay: 1.6s;
+}
+/* a crowned tile gets a matching rim and a warm glow from the top (speaking still wins) */
+.tile.crowned-talk:not(.speaking)::before {
+  background: linear-gradient(160deg, rgba(255, 207, 74, 0.85), rgba(255, 207, 74, 0.12) 45%, rgba(255, 207, 74, 0.12) 60%, rgba(255, 207, 74, 0.6));
+}
+.tile.crowned-stream:not(.speaking)::before {
+  background: linear-gradient(160deg, rgba(255, 92, 174, 0.85), rgba(255, 92, 174, 0.12) 45%, rgba(255, 92, 174, 0.12) 60%, rgba(255, 92, 174, 0.6));
+}
+.tile.crowned-talk {
+  background:
+    radial-gradient(180px 90px at 50% 0%, rgba(255, 207, 74, 0.14), transparent 70%),
+    radial-gradient(160px 120px at 50% 36%, color-mix(in srgb, var(--rc) 15%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(14, 22, 36, 0.92), rgba(6, 10, 18, 0.95)) !important;
+}
+.tile.crowned-stream {
+  background:
+    radial-gradient(180px 90px at 50% 0%, rgba(255, 92, 174, 0.14), transparent 70%),
+    radial-gradient(160px 120px at 50% 36%, color-mix(in srgb, var(--rc) 15%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(14, 22, 36, 0.92), rgba(6, 10, 18, 0.95)) !important;
+}
+.tiles.grid-s .tile-crown-label,
+.tiles.grid-xs .tile-crown-label {
+  display: none;
+}
+@keyframes crown-float {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-3px) rotate(2deg); }
+}
+@keyframes crown-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.5px); }
+}
+@keyframes crown-glow {
+  0%, 100% { opacity: 0.35; transform: scale(0.9); }
+  50% { opacity: 0.7; transform: scale(1.1); }
+}
+@keyframes crown-shine {
+  0%, 55% { transform: translateX(0); }
+  100% { transform: translateX(80px); }
+}
+@keyframes crown-jewel {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.25); }
+}
+@keyframes crown-spark {
+  0%, 100% { opacity: 0; transform: scale(0.4) rotate(0deg); }
+  40% { opacity: 1; transform: scale(1.4) rotate(45deg); }
+  70% { opacity: 0; transform: scale(0.6) rotate(90deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tile-crown, .crown-tag, .crown-shine, .crown-jewel, .tile-crown-spark, .tile-crown-glow { animation: none; }
+}
+
+/* ---------- quick dock (sidebar shortcuts) ---------- */
+.quick-dock {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 0 12px 8px;
+}
+.quick-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 2px 6px;
+  color: var(--muted);
+  background: rgba(14, 22, 36, 0.85);
+  box-shadow: inset 0 0 0 1px var(--line);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.quick-btn span {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.quick-btn:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, rgba(14, 22, 36, 0.85));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.quick-badge {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 4px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.quick-badge.full {
+  color: #04150c;
+  background: var(--speaking);
+}
+.quick-badge.hot {
+  color: #2a1a00;
+  background: #ffd678;
+}
+.round-btn.help {
+  color: #ffb3c1;
+}
+
+/* ---------- the big crown standing on a crowned call tile ---------- */
+.tiles.has-crown {
+  align-items: flex-end;
+  /* never push the crown above the visible area when the grid overflows */
+  align-content: safe center;
+  padding-top: 14px;
+}
+.tile-crown-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-top: 84px;
+}
+.big-crown {
+  position: absolute;
+  top: 4px;
+  left: 14px;
+  right: 14px;
+  height: 90px;
+  z-index: 2;
+  pointer-events: auto;
+  transform-origin: 50% 100%;
+  animation: big-crown-float 3.4s ease-in-out infinite;
+}
+.big-crown-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
+}
+.big-crown.talk .big-crown-svg {
+  filter: drop-shadow(0 0 10px rgba(255, 207, 74, 0.6)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
+}
+.big-crown.stream .big-crown-svg {
+  filter: drop-shadow(0 0 10px rgba(255, 92, 174, 0.6)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
+}
+.big-crown.both .big-crown-svg {
+  filter: drop-shadow(0 0 10px rgba(255, 150, 110, 0.6)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
+}
+.big-crown-glow {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 10%;
+  bottom: 0;
+  border-radius: 50%;
+  filter: blur(18px);
+  animation: crown-glow 3.4s ease-in-out infinite;
+}
+.big-crown.talk .big-crown-glow {
+  background: rgba(255, 207, 74, 0.55);
+}
+.big-crown.stream .big-crown-glow {
+  background: rgba(255, 92, 174, 0.55);
+}
+.big-crown.both .big-crown-glow {
+  background: rgba(255, 150, 110, 0.55);
+}
+.big-crown-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 1px;
+  text-align: center;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #2a1700;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.big-crown.stream .big-crown-label {
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+}
+.big-crown.both .big-crown-label {
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+}
+.big-crown-shine {
+  animation: big-crown-shine 4s ease-in-out infinite;
+}
+.big-crown-jewel {
+  animation: crown-jewel 2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.big-crown-jewel.j2 {
+  animation-delay: 0.6s;
+}
+.big-crown-jewel.j3 {
+  animation-delay: 1.2s;
+}
+.big-crown .tile-crown-spark {
+  width: 7px;
+  height: 7px;
+}
+.big-crown .tile-crown-spark.s1 {
+  top: 6px;
+  left: 18%;
+}
+.big-crown .tile-crown-spark.s2 {
+  top: -4px;
+  right: 20%;
+}
+.big-crown .tile-crown-spark.s3 {
+  top: 26px;
+  left: 50%;
+}
+/* the crowned card itself: a matching rim, slightly closer to the crown */
+.tile-crown-wrap .tile {
+  margin-top: -2px;
+}
+.tiles.grid-xl .tile-crown-wrap {
+  padding-top: 104px;
+}
+.tiles.grid-xl .big-crown {
+  height: 110px;
+}
+.tiles.grid-s .tile-crown-wrap,
+.tiles.grid-xs .tile-crown-wrap {
+  padding-top: 52px;
+}
+.tiles.grid-s .big-crown,
+.tiles.grid-xs .big-crown {
+  height: 56px;
+}
+.tiles.grid-s .big-crown-label,
+.tiles.grid-xs .big-crown-label {
+  display: none;
+}
+@keyframes big-crown-float {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-4px) rotate(1deg); }
+}
+@keyframes big-crown-shine {
+  0%, 50% { transform: translateX(0); }
+  100% { transform: translateX(320px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .big-crown, .big-crown-shine, .big-crown-jewel, .big-crown-glow { animation: none; }
 }

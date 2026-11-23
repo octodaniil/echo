@@ -7,6 +7,7 @@ import dfnModelUrl from './dfn/DeepFilterNet3_onnx.tar.gz?url';
 import dfnWorkletUrl from './dfn/dfnWorklet.js?url';
 import type { NoiseSuppressionMode, Settings } from './settings';
 import { report } from './diag';
+import { SpeechDetector } from './vad/vad';
 
 /**
  * Microphone processing chain, all inside one 48 kHz AudioContext:
@@ -69,6 +70,19 @@ export class MicPipeline {
   threshold = -50;
   gateOpen = false;
   private holdUntil = 0;
+  /** Silero speech detector on the raw mic (null until loaded, or if it failed). */
+  private vad: SpeechDetector | null = null;
+  /** Last moment speech was detected (for the gentle dip in continuous mode). */
+  private lastSpeech = 0;
+  /** Current gate gain target (1 open, 0 closed, 0.35 dipped). */
+  private gateTarget = 0;
+  /**
+   * A little of the untouched mic mixed under the noise suppressor's output, so a word the
+   * suppressor mistakes for noise is softened instead of erased. Delayed to line up with
+   * the suppressor's own latency.
+   */
+  private readonly dryDelay = this.ctx.createDelay(0.1);
+  private readonly dryGain = this.ctx.createGain();
 
   private gateListeners = new Set<(open: boolean) => void>();
   private levelListeners = new Set<() => void>();
@@ -95,6 +109,12 @@ export class MicPipeline {
     this.lookahead.channelCount = 1;
     this.lookahead.channelCountMode = 'explicit';
     this.inputGain.connect(this.lookahead).connect(this.gate);
+    for (const node of [this.dryDelay, this.dryGain] as AudioNode[]) {
+      node.channelCount = 1;
+      node.channelCountMode = 'explicit';
+    }
+    this.dryGain.gain.value = 0;
+    this.dryDelay.connect(this.dryGain).connect(this.inputGain);
     this.gate.connect(this.dest);
   }
 
@@ -163,6 +183,17 @@ export class MicPipeline {
   async start(s: Settings) {
     await this.ctx.resume();
     await this.apply(s);
+    // The speech detector loads in the background; until then the level gate works.
+    void SpeechDetector.create(this.ctx)
+      .then((d) => {
+        if (this.destroyed) return d.close();
+        this.vad = d;
+        this.source?.connect(d.node);
+      })
+      .catch((err) => {
+        console.warn('[mic] speech detector unavailable', err);
+        report('vad-failed', { error: String(err) });
+      });
     this.timer = window.setInterval(() => this.tick(), 20);
   }
 
@@ -212,6 +243,7 @@ export class MicPipeline {
       });
     }
     if (needRewire) await this.rewire(s);
+    else this.tune(s);
   }
 
   private onDeviceChange = () => {
@@ -276,7 +308,11 @@ export class MicPipeline {
 
     this.source = this.ctx.createMediaStreamSource(this.stream!);
     this.source.connect(this.rawAnalyser);
+    if (this.vad) this.source.connect(this.vad.node);
     const kind = processorOf(s.noiseSuppression);
+    // Dry mix only under a neural suppressor; 'max' keeps it smaller.
+    if (kind !== 'none') this.source.connect(this.dryDelay);
+    this.tune(s);
     if (kind === 'dfn' && !this.dfnBroken) {
       try {
         const node = await createDeepFilter(this.ctx);
@@ -307,6 +343,16 @@ export class MicPipeline {
     } else {
       this.source.connect(this.inputGain);
     }
+  }
+
+  /** Dry mix and look-ahead for the current mode (no rewiring needed). */
+  private tune(s: Settings) {
+    const kind = processorOf(s.noiseSuppression);
+    this.dryDelay.delayTime.value = kind === 'dfn' ? 0.018 : 0.01;
+    this.dryGain.gain.value = kind === 'none' ? 0 : s.noiseSuppression === 'max' ? 0.06 : 0.12;
+    // Look-ahead: a gate that fully closes needs time to open before the first syllable;
+    // the continuous mode (neural suppressor + auto) never closes, so it barely needs any.
+    this.lookahead.delayTime.value = kind !== 'none' && s.sensitivityAuto ? 0.03 : 0.12;
   }
 
   private tick() {
@@ -383,13 +429,32 @@ export class MicPipeline {
       : s.sensitivityDb;
 
     const now = performance.now();
-    if (db > this.threshold) this.holdUntil = now + 300;
-    const open = now < this.holdUntil;
-    if (open !== this.gateOpen) {
-      this.gateOpen = open;
+    // Is the person speaking? Auto: the neural speech detector (whispers count, keyboards
+    // don't), held 600 ms after the last speech frame. Manual sensitivity, or no detector:
+    // the level threshold, with hysteresis (closes 6 dB lower) and the same 600 ms hold.
+    const vadLive = !!this.vad && now - this.vad.lastFrame < 500;
+    if (s.sensitivityAuto && vadLive) {
+      const p = this.vad!.prob;
+      if (p > 0.5 || (this.gateOpen && p > 0.3)) this.holdUntil = now + 600;
+    } else if (db > this.threshold || (this.gateOpen && db > this.threshold - 6)) {
+      this.holdUntil = now + 600;
+    }
+    const speaking = now < this.holdUntil;
+    if (speaking) this.lastSpeech = now;
+    // With a neural suppressor and auto sensitivity nothing is ever cut: the suppressor
+    // already removes the noise, so between phrases the voice is only dipped by 9 dB, and
+    // only after 1.5 s without speech. Otherwise the gate closes as before.
+    const continuous = processorOf(s.noiseSuppression) !== 'none' && s.sensitivityAuto;
+    const target = continuous ? (now - this.lastSpeech < 1500 ? 1 : 0.35) : speaking ? 1 : 0;
+    if (target !== this.gateTarget) {
+      const opening = target > this.gateTarget;
+      this.gateTarget = target;
       // Fast attack, gentle release to avoid clicks.
-      this.gate.gain.setTargetAtTime(open ? 1 : 0, this.ctx.currentTime, open ? 0.004 : 0.06);
-      for (const fn of this.gateListeners) fn(open);
+      this.gate.gain.setTargetAtTime(target, this.ctx.currentTime, opening ? 0.004 : continuous ? 0.25 : 0.08);
+    }
+    if (speaking !== this.gateOpen) {
+      this.gateOpen = speaking;
+      for (const fn of this.gateListeners) fn(speaking);
     }
     for (const fn of this.levelListeners) fn();
   }
@@ -408,6 +473,7 @@ export class MicPipeline {
 
   async destroy() {
     this.destroyed = true;
+    this.vad?.close();
     navigator.mediaDevices.removeEventListener('devicechange', this.onDeviceChange);
     clearInterval(this.timer);
     this.stream?.getTracks().forEach((t) => t.stop());

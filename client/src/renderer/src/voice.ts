@@ -123,6 +123,10 @@ class VoiceClient {
   /** Last seconds: was the gate open, and how many bytes the mic sender had sent. */
   private sendWindow: { open: boolean; bytes: number }[] = [];
   private lastSendFix = 0;
+  /** Last mute / deafen / mic-test change: LiveKit's own mute lags behind our state for a moment. */
+  private lastMuteChange = 0;
+  /** The mic track looked paused / muted on the previous tick too (one tick can be a mute in flight). */
+  private pausedTicks = 0;
   /** Per friend: since when the server says they talk while we hear nothing. */
   private silentWhileSpeaking = new Map<string, number>();
   private lastResubscribe = new Map<string, number>();
@@ -383,7 +387,8 @@ class VoiceClient {
       if (loud) this.remoteSpeakingUntil.set(p.identity, now + SPEAKING_HOLD_MS);
       // Receive watchdog: the server hears them talk (it measures their packets) but their
       // audio reaching us is silent for 3 s -> our subscription is stuck; resubscribe.
-      if (m && p.isSpeaking && pub.isSubscribed) {
+      if (this.meterCtx?.state !== 'running') void this.meterCtx?.resume().catch(() => {});
+      if (m && p.isSpeaking && pub.isSubscribed && this.meterCtx?.state === 'running') {
         m.analyser.getFloatTimeDomainData(this.meterBuf);
         let sum = 0;
         for (const v of this.meterBuf) sum += v * v;
@@ -434,9 +439,17 @@ class VoiceClient {
       this.sendWindow = [];
       return;
     }
+    // Right after a mute / unmute / mic test LiveKit's track catches up with our state: wait.
+    if (Date.now() - this.lastMuteChange < 4000) {
+      this.sendWindow = [];
+      this.pausedTicks = 0;
+      return;
+    }
     // LiveKit pauses sending when the browser reports the track as muted, and resumes only
-    // on an "unmute" event that may never come.
-    if (track.isUpstreamPaused || track.isMuted) {
+    // on an "unmute" event that may never come. Two ticks in a row = really stuck.
+    this.pausedTicks = track.isUpstreamPaused || track.isMuted ? this.pausedTicks + 1 : 0;
+    if (this.pausedTicks >= 2) {
+      this.pausedTicks = 0;
       report('send-fix', { step: 'unpause', paused: track.isUpstreamPaused, muted: track.isMuted, ...this.micSnapshot() });
       await track.resumeUpstream().catch(() => {});
       if (track.isMuted) await track.unmute().catch(() => {});
@@ -450,10 +463,13 @@ class VoiceClient {
       });
     }
     if (this.micTrack !== track) return;
-    this.sendWindow.push({ open: p.gateOpen, bytes });
+    // Only clearly audible speech counts: quiet sounds that open the gate (breath, a click)
+    // are legitimately sent as near-silence by Opus (DTX).
+    this.sendWindow.push({ open: p.gateOpen && p.level > -48, bytes });
     if (this.sendWindow.length > 4) this.sendWindow.shift();
     if (this.sendWindow.length < 4) return;
     const openTicks = this.sendWindow.slice(1).filter((x) => x.open).length;
+    if (openTicks < 3) return;
     const sent = this.sendWindow[3]!.bytes - this.sendWindow[0]!.bytes;
     // A new sender (after a republish) starts counting from zero: start the window over.
     if (sent < 0) {
@@ -1009,6 +1025,7 @@ class VoiceClient {
   async setMicTest(on: boolean) {
     if (this.micTesting === on) return;
     this.micTesting = on;
+    this.lastMuteChange = Date.now();
     if (!this.micTrack) return;
     if (on) await this.micTrack.mute();
     else if (!this.state.micMuted && !this.state.deafened) await this.micTrack.unmute();
@@ -1048,6 +1065,7 @@ class VoiceClient {
   private async setMic(muted: boolean, silent = false) {
     if (!silent && muted !== this.state.micMuted) void play(muted ? 'mute' : 'unmute');
     this.set({ micMuted: muted });
+    this.lastMuteChange = Date.now();
     if (this.micTrack) await (muted || this.micTesting ? this.micTrack.mute() : this.micTrack.unmute());
     this.syncParticipants();
   }

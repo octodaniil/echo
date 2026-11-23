@@ -233,7 +233,7 @@ function VoiceTab() {
       <label class="switch-row">
         <span>
           Определять автоматически
-          <small>Echo сам подстраивает порог под шум в комнате</small>
+          <small>Нейросеть Silero отличает речь от шума: шёпот проходит, клавиатура и вентилятор — нет. С ИИ-шумодавом голос не обрезается совсем</small>
         </span>
         <Toggle checked={s.sensitivityAuto} onChange={(v) => settings.update({ sensitivityAuto: v })} />
       </label>

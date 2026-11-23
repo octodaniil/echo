@@ -292,7 +292,13 @@ export interface FunState {
   predictions: {
     evening: string;
     open: boolean;
+    opensAtHour: number;
     closesAtHour: number;
+    last: {
+      evening: string;
+      talk: PredictionResult;
+      stream: PredictionResult;
+    };
     prize: number;
     mine: Partial<Record<'talk' | 'stream', string>>;
     tally: Record<'talk' | 'stream', { id: string; nickname: string; votes: number }[]>;
@@ -302,7 +308,14 @@ export interface FunState {
   richest: { user_id: string; sparks: number; nickname: string }[];
 }
 
+export interface PredictionResult {
+  winner: { id: string; nickname: string } | null;
+  guessed: string[];
+  votes: number;
+}
+
 export type FunEvent =
+  | { type: 'results' }
   | { type: 'changed' }
   | { type: 'bet-won'; amount: number; question: string }
   | { type: 'predicted'; kind: string; amount: number }

@@ -9,8 +9,9 @@ import { StatusLine, StatusMenu, useMyStatus } from './Status';
 import { canModerate, MembersView, ModTools, RoleTag, type Role } from './Moderation';
 import { ChatPanel, type ChatPerson } from './ChatPanel';
 import { MyAchievementsView } from './MyAchievements';
-import { Crowns, RecapView } from './Weekly';
+import { Crowns, RecapView, TileCrowns } from './Weekly';
 import { FunView } from './Fun';
+import { QuickDock } from './QuickDock';
 import { chat, dmConv, useChat } from './chatStore';
 import { coverUrl, GameCover } from './GameCover';
 import { Avatar, Nick } from './Avatar';
@@ -144,7 +145,8 @@ export function Main({
   useEffect(
     () =>
       window.echo.onFun((e) => {
-        if (e.type === 'bet-won') showToast(`Ты выиграл спор «${e.question}»: +${e.amount} искр`, 7000);
+        if (e.type === 'results') showToast('Итоги вчерашних прогнозов готовы — загляни в «Вечер»', 7000);
+        else if (e.type === 'bet-won') showToast(`Ты выиграл спор «${e.question}»: +${e.amount} искр`, 7000);
         else if (e.type === 'predicted')
           showToast(`Прогноз сбылся — ${e.kind === 'talk' ? 'король болтовни' : 'звезда эфира'} угадан: +${e.amount} искр`, 7000);
         else if (e.type === 'capsule') {
@@ -557,6 +559,13 @@ export function Main({
           />
         </ChannelList>
 
+        <QuickDock
+          onAchievements={() => setShowMyAch(true)}
+          onWeekly={() => setProfileId(me.id)}
+          onFun={() => setShowFun(true)}
+          onRecap={() => setRecap('last')}
+        />
+
         {v.status !== 'idle' && (
           <div class="voice-status">
             <div class="voice-status-info">
@@ -586,28 +595,6 @@ export function Main({
               setStatusMenu(false);
               setProfileId(me.id);
             }}
-            onAchievements={() => {
-              setStatusMenu(false);
-              setShowMyAch(true);
-            }}
-            onRecap={() => {
-              setStatusMenu(false);
-              setRecap('last');
-            }}
-            onFun={() => {
-              setStatusMenu(false);
-              setShowFun(true);
-            }}
-            onNotHeard={
-              v.status === 'connected'
-                ? () => {
-                    setStatusMenu(false);
-                    void voice.reportNotHeard().then(() =>
-                      showToast('Отчёт отправлен админу. Echo заодно перезапустил отправку голоса — попробуй сказать ещё раз', 7000),
-                    );
-                  }
-                : undefined
-            }
             onClose={() => setStatusMenu(false)}
             onError={(m) => showToast(m)}
           />
@@ -667,6 +654,11 @@ export function Main({
               chatOpen={chatConv === `ch:${currentChannel.id}`}
               chatUnread={store.unreadOf(`ch:${currentChannel.id}`).unread}
               onToggleChat={() => setChatConv(chatConv === `ch:${currentChannel.id}` ? null : `ch:${currentChannel.id}`)}
+              onNotHeard={() =>
+                void voice
+                  .reportNotHeard()
+                  .then(() => showToast('Отчёт отправлен админу, отправка голоса перезапущена. Скажи что-нибудь ещё раз', 7000))
+              }
             />
           ) : (
             <div class="empty">
@@ -1203,6 +1195,7 @@ function VoiceStage({
   chatOpen,
   chatUnread,
   onToggleChat,
+  onNotHeard,
 }: {
   channel: Channel;
   state: VoiceState;
@@ -1213,6 +1206,8 @@ function VoiceStage({
   chatOpen: boolean;
   chatUnread: number;
   onToggleChat: () => void;
+  /** «Меня не слышно»: report + repair. */
+  onNotHeard: () => void;
 }) {
   const [picker, setPicker] = useState(false);
   const watched = state.watching ? people.find((p) => p.id === state.watching) : undefined;
@@ -1302,13 +1297,16 @@ function VoiceStage({
         <StreamView person={watched} nameOf={nameOf} onPopout={popOutStream} />
       ) : null}
 
-      <div class={`tiles ${watched ? 'strip' : `grid-${gridSize(people.length)}`}`}>
+      <div
+        class={`tiles ${watched ? 'strip' : `grid-${gridSize(people.length)}`}${!watched && people.some((p) => p.crowns?.length) ? ' has-crown' : ''}`}
+      >
         {people.map((p) => {
           const canWatch = p.streaming && !p.isLocal;
-          return (
+          const crowned = !watched && !!p.crowns?.length;
+          const tile = (
             <div
-              key={p.id}
-              class={`tile rank-${p.prestige?.tier ?? 0}${p.speaking ? ' speaking' : ''}${canWatch ? ' streaming' : ''}${state.watching === p.id ? ' watched' : ''}`}
+              key={crowned ? undefined : p.id}
+              class={`tile rank-${p.prestige?.tier ?? 0}${crowned ? ` crowned crowned-${p.crowns!.length > 1 ? 'talk' : p.crowns![0]}` : ''}${p.speaking ? ' speaking' : ''}${canWatch ? ' streaming' : ''}${state.watching === p.id ? ' watched' : ''}`}
               style={{
                 ...lookVars(p.style),
                 ...(!watched && p.activity && coverUrl(p.activity.game)
@@ -1339,7 +1337,7 @@ function VoiceStage({
               <div class="tile-name">
                 <Nick name={p.nickname} look={p.style} />
                 <RoleTag role={p.role} />
-                <Crowns crowns={p.crowns} />
+                {watched && <Crowns crowns={p.crowns} />}
                 {p.afk && <span class="afk-tag">АФК</span>}
                 {p.isLocal && <span class="muted"> (ты)</span>}
                 {p.micMuted && <MicOffIcon size={14} class="member-muted" />}
@@ -1368,6 +1366,14 @@ function VoiceStage({
               {canWatch && !watched && <span class="watch-hint">Смотреть</span>}
             </div>
           );
+          return crowned ? (
+            <div key={p.id} class="tile-crown-wrap">
+              <TileCrowns crowns={p.crowns} />
+              {tile}
+            </div>
+          ) : (
+            tile
+          );
         })}
       </div>
 
@@ -1387,6 +1393,19 @@ function VoiceStage({
         >
           {state.deafened ? <HeadphonesOffIcon /> : <HeadphonesIcon />}
           <span class="rb-label">ЗВУК</span>
+        </button>
+        <button
+          class="round-btn help"
+          title="Друзья тебя не слышат? Echo перезапустит отправку голоса и пришлёт админу отчёт"
+          disabled={!connected}
+          onClick={onNotHeard}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 3h6v8a3 3 0 0 1-6 0z M5 10a7 7 0 0 0 14 0 M12 17v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <circle cx="19" cy="5" r="4" fill="var(--danger, #ff5c7a)" />
+            <path d="M19 3v2.4 M19 7v.1" stroke="#fff" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          <span class="rb-label">НЕ СЛЫШНО?</span>
         </button>
         <span class="dock-sep" />
         <button

@@ -257,9 +257,25 @@ function Predictions({ state, people, run }: { state: FunState; people: { id: st
   return (
     <>
       <p class="muted tiny">
-        Угадай, кому сегодня достанется корона. Прогнозы — с 06:00 до {p.closesAtHour}:00, итоги — когда вечер закончится (в 06:00).
-        Угадал — +{p.prize} искр. {p.open ? '' : 'Сейчас приём закрыт.'}
+        Угадай, кому сегодня достанется корона. Прогнозы принимаются с {p.opensAtHour}:00 до 0{p.closesAtHour}:00 ночи, итоги — на
+        следующий день. Угадал — +{p.prize} искр. {p.open ? '' : `Сейчас приём закрыт — откроется в ${p.opensAtHour}:00.`}
       </p>
+      {(p.last.talk.votes > 0 || p.last.stream.votes > 0 || p.last.talk.winner || p.last.stream.winner) && (
+        <div class="predict predict-last">
+          <div class="bet-head">
+            <b>Итоги вчерашнего вечера</b>
+          </div>
+          {kinds.map((k) => {
+            const r = p.last[k.id];
+            return (
+              <div key={k.id} class="tiny">
+                {k.title}: <b>{r.winner?.nickname ?? 'никто не набрал'}</b>
+                {r.votes > 0 && (r.guessed.length ? ` · угадали: ${r.guessed.join(', ')}` : ' · никто не угадал')}
+              </div>
+            );
+          })}
+        </div>
+      )}
       {kinds.map((k) => (
         <div key={k.id} class="predict">
           <div class="bet-head">
