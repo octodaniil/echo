@@ -25,6 +25,7 @@ import {
 import * as chat from './chat.ts';
 import * as weekly from './weekly.ts';
 import * as fun from './fun.ts';
+import * as diag from './diag.ts';
 import { equip, GRANTABLE, parseGrants, parseStatus, setGrant, setStatus, SLOTS, styleContext, styleOf } from './cosmetics.ts';
 import { createInvite, HttpError, publicUser, redeemInvite, requireAdmin, requireStaff, requireUser } from './auth.ts';
 import {
@@ -145,6 +146,14 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   // ---------- weekly: challenges, duo quests, recap ----------
+
+  // ---------- diagnostics reports (mic / audio self-repairs, «Меня не слышно») ----------
+
+  app.post('/api/me/diag', { preHandler: requireUser }, async (req) => {
+    const body = parse(z.object({ kind: z.string().max(40), version: z.string().max(20).default(''), data: z.record(z.string(), z.unknown()).default({}) }), req.body);
+    return { ok: diag.addReport(req.user.id, body.kind, body.version, body.data) };
+  });
+  app.get('/api/diag', { preHandler: requireStaff }, async () => ({ reports: diag.listReports() }));
 
   app.get('/api/weekly', { preHandler: requireUser }, async (req) => ({
     challenges: weekly.challengeState(req.user.id),
