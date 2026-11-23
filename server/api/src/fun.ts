@@ -14,7 +14,9 @@ export const START_SPARKS = 500;
 const DAILY_SPARKS = 50;
 const POOR_FLOOR = 50;
 const PREDICT_PRIZE = 100;
-const PREDICT_CLOSE_HOUR = 21;
+/** Predictions are taken from 15:00 until 03:00 (server time); results come the next day. */
+const PREDICT_OPEN_HOUR = 15;
+const PREDICT_CLOSE_HOUR = 3;
 const MIN_STAKE = 10;
 
 db.exec(`
@@ -89,6 +91,7 @@ const q = {
     'INSERT INTO predictions (evening, kind, user_id, pick) VALUES (?, ?, ?, ?) ON CONFLICT(evening, kind, user_id) DO UPDATE SET pick = excluded.pick',
   ),
   predictionsOf: db.prepare('SELECT kind, user_id, pick FROM predictions WHERE evening = ?'),
+  resultsOf: db.prepare('SELECT kind, user_id, pick, result FROM predictions WHERE evening = ? AND result IS NOT NULL'),
   unresolvedEvenings: db.prepare('SELECT DISTINCT evening FROM predictions WHERE result IS NULL AND evening < ?'),
   unresolved: db.prepare('SELECT kind, user_id, pick FROM predictions WHERE evening = ? AND result IS NULL'),
   setResult: db.prepare('UPDATE predictions SET result = ? WHERE evening = ? AND kind = ? AND user_id = ?'),
@@ -119,7 +122,8 @@ type FunEvent =
   | { type: 'changed' }
   | { type: 'bet-won'; userId: string; amount: number; question: string }
   | { type: 'predicted'; userId: string; kind: string; amount: number }
-  | { type: 'capsule'; capsule: CapsuleRow };
+  | { type: 'capsule'; capsule: CapsuleRow }
+  | { type: 'results' };
 let listener: (e: FunEvent) => void = () => {};
 export function setFunListener(fn: (e: FunEvent) => void) {
   listener = fn;
@@ -277,7 +281,9 @@ export function predictionsState(viewer: string) {
   return {
     evening,
     open: predictionsOpen(),
+    opensAtHour: PREDICT_OPEN_HOUR,
     closesAtHour: PREDICT_CLOSE_HOUR,
+    last: lastResults(),
     prize: PREDICT_PRIZE,
     mine: Object.fromEntries(rows.filter((r) => r.user_id === viewer).map((r) => [r.kind, r.pick])),
     tally: { talk: tally('talk'), stream: tally('stream') },
@@ -287,11 +293,24 @@ export function predictionsState(viewer: string) {
 
 const predictionsOpen = () => {
   const h = weekly.localHour();
-  return h >= 6 && h < PREDICT_CLOSE_HOUR;
+  return h >= PREDICT_OPEN_HOUR || h < PREDICT_CLOSE_HOUR;
 };
 
+/** Yesterday evening's crowns and who guessed them (shown the next day). */
+function lastResults() {
+  const evening = weekly.eveningKey(Date.now() - 86_400_000);
+  const rows = q.resultsOf.all(evening) as { kind: 'talk' | 'stream'; user_id: string; pick: string; result: number }[];
+  const crowns = weekly.crownOfEvening(evening);
+  const of = (kind: 'talk' | 'stream') => ({
+    winner: crowns[kind] ? { id: crowns[kind], nickname: nick(crowns[kind]!) } : null,
+    guessed: rows.filter((r) => r.kind === kind && r.result === 1).map((r) => nick(r.user_id)),
+    votes: rows.filter((r) => r.kind === kind).length,
+  });
+  return { evening, talk: of('talk'), stream: of('stream') };
+}
+
 export function predict(userId: string, kind: 'talk' | 'stream', pick: string) {
-  if (!predictionsOpen()) throw new Error(`Прогнозы принимаются с 06:00 до ${PREDICT_CLOSE_HOUR}:00`);
+  if (!predictionsOpen()) throw new Error(`Прогнозы принимаются с ${PREDICT_OPEN_HOUR}:00 до 0${PREDICT_CLOSE_HOUR}:00 ночи`);
   if (!queries.userById.get(pick)) throw new Error('Нет такого человека');
   q.predict.run(weekly.eveningKey(), kind, userId, pick);
   listener({ type: 'changed' });
@@ -300,8 +319,10 @@ export function predict(userId: string, kind: 'talk' | 'stream', pick: string) {
 /** Pays out predictions of evenings that are over. Runs on a timer. */
 export function resolvePredictions() {
   const today = weekly.eveningKey();
+  let announce = false;
   for (const { evening } of q.unresolvedEvenings.all(today) as { evening: string }[]) {
     const crowns = weekly.crownOfEvening(evening);
+    announce = true;
     for (const r of q.unresolved.all(evening) as { kind: 'talk' | 'stream'; user_id: string; pick: string }[]) {
       const right = crowns[r.kind] === r.pick;
       q.setResult.run(right ? 1 : 0, evening, r.kind, r.user_id);
@@ -314,6 +335,7 @@ export function resolvePredictions() {
       }
     }
   }
+  if (announce) listener({ type: 'results' });
 }
 
 // ---------------- time capsules ----------------

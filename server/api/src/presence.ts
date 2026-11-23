@@ -149,6 +149,7 @@ void award;
 fun.setFunCounterListener((userId, kind) => checkSeries(userId, [kind]));
 fun.setFunListener((e) => {
   if (e.type === 'changed') sendToUsers(null, 'fun', { type: 'changed' });
+  else if (e.type === 'results') sendToUsers(null, 'fun', { type: 'results' });
   else if (e.type === 'bet-won') sendTo(e.userId, 'fun', { type: 'bet-won', amount: e.amount, question: e.question });
   else if (e.type === 'predicted') sendTo(e.userId, 'fun', { type: 'predicted', kind: e.kind, amount: e.amount });
   else funCapsule(e.capsule);
