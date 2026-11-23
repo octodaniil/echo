@@ -1694,6 +1694,7 @@ function StreamView({
             max={2}
             step={0.01}
             value={volume}
+            style={{ '--pos': `${(volume / 2) * 100}%` }}
             onInput={(e) => voice.setStreamVolume(person.id, Number(e.currentTarget.value))}
           />
         </label>
@@ -1765,6 +1766,8 @@ function PopoutStream({
             max={2}
             step={0.01}
             value={volume}
+            // Set here, not by the main window's range observer: the pop-out is another document.
+            style={{ '--pos': `${(volume / 2) * 100}%` }}
             onInput={(e) => voice.setStreamVolume(participantId, Number(e.currentTarget.value))}
           />
         </label>

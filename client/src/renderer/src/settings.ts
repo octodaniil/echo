@@ -54,7 +54,7 @@ export const defaults: Settings = {
   outputDeviceId: 'default',
   inputVolume: 1,
   outputVolume: 1,
-  noiseSuppression: 'ai',
+  noiseSuppression: 'dfn',
   echoCancellation: true,
   autoGain: true,
   sensitivityAuto: true,
@@ -81,13 +81,20 @@ function load(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...defaults };
-    const saved = JSON.parse(raw) as Partial<Settings> & { dfnMigrated?: boolean; dfnReverted?: boolean };
+    const saved = JSON.parse(raw) as Partial<Settings> & { dfnMigrated?: boolean; dfnReverted?: boolean; dfnDefault?: boolean };
     // 1.1.0 moved everyone to «ИИ-шумодав 2.0»; it cut quiet speech for some, so 1.1.2 moves
     // everyone back once. Whoever wants it picks it again in the settings.
     if (!saved.dfnReverted) {
       if (saved.noiseSuppression === 'dfn') saved.noiseSuppression = 'ai';
       saved.dfnReverted = true;
       saved.dfnMigrated = true;
+      localStorage.setItem(KEY, JSON.stringify(saved));
+    }
+    // 1.2.2: the tuned «ИИ-шумодав 2.0» (clean, keeps quiet word endings) becomes the default;
+    // everyone on the regular AI suppressor moves to it once. Other modes are left alone.
+    if (!saved.dfnDefault) {
+      if (saved.noiseSuppression === 'ai') saved.noiseSuppression = 'dfn';
+      saved.dfnDefault = true;
       localStorage.setItem(KEY, JSON.stringify(saved));
     }
     return { ...defaults, ...saved };

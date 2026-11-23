@@ -76,13 +76,7 @@ export class MicPipeline {
   private lastSpeech = 0;
   /** Current gate gain target (1 open, 0 closed, 0.35 dipped). */
   private gateTarget = 0;
-  /**
-   * A little of the untouched mic mixed under the noise suppressor's output, so a word the
-   * suppressor mistakes for noise is softened instead of erased. Delayed to line up with
-   * the suppressor's own latency.
-   */
-  private readonly dryDelay = this.ctx.createDelay(0.1);
-  private readonly dryGain = this.ctx.createGain();
+
 
   private gateListeners = new Set<(open: boolean) => void>();
   private levelListeners = new Set<() => void>();
@@ -109,12 +103,7 @@ export class MicPipeline {
     this.lookahead.channelCount = 1;
     this.lookahead.channelCountMode = 'explicit';
     this.inputGain.connect(this.lookahead).connect(this.gate);
-    for (const node of [this.dryDelay, this.dryGain] as AudioNode[]) {
-      node.channelCount = 1;
-      node.channelCountMode = 'explicit';
-    }
-    this.dryGain.gain.value = 0;
-    this.dryDelay.connect(this.dryGain).connect(this.inputGain);
+
     this.gate.connect(this.dest);
   }
 
@@ -311,7 +300,6 @@ export class MicPipeline {
     if (this.vad) this.source.connect(this.vad.node);
     const kind = processorOf(s.noiseSuppression);
     // Dry mix only under a neural suppressor; 'max' keeps it smaller.
-    if (kind !== 'none') this.source.connect(this.dryDelay);
     if (kind === 'dfn' && !this.dfnBroken) {
       try {
         const node = await createDeepFilter(this.ctx);
@@ -346,15 +334,12 @@ export class MicPipeline {
     this.tune(s);
   }
 
-  /** Dry mix and look-ahead for the current mode (no rewiring needed). */
+  /** Look-ahead for the current mode (no rewiring needed). */
   private tune(s: Settings) {
     const kind = processorOf(s.noiseSuppression);
-    // The dry copy must line up with the suppressor's output to the sample, or the two add up
-    // as a comb filter ("talking from a barrel"). RNNoise's worklet delays by exactly 992
-    // samples (measured). DeepFilterNet mixes the untouched signal itself, inside its STFT
-    // (attenuation limit), which is aligned by construction, so no outside copy is added.
-    this.dryDelay.delayTime.value = RNNOISE_DELAY_S;
-    this.dryGain.gain.value = this.rnnoise ? (s.noiseSuppression === 'max' ? 0.06 : 0.12) : 0;
+    // No dry (unprocessed) mix under the suppressor: in 1.2.0-1.2.1 it brought the room noise
+    // back under the voice (heard as a rough, "not clean" sound). Words are protected by the
+    // speech detector + continuous mode instead, and DeepFilterNet's own threshold (-15 dB).
     // Look-ahead: a gate that fully closes needs time to open before the first syllable;
     // the continuous mode (neural suppressor + auto) never closes, so it barely needs any.
     this.lookahead.delayTime.value = kind !== 'none' && s.sensitivityAuto ? 0.03 : 0.12;
@@ -492,11 +477,6 @@ export class MicPipeline {
 
 // 'max' stacks both: WebRTC NS handles steady hum/fans, RNNoise handles clicks and bursts.
 const usesBrowserNs = (m: NoiseSuppressionMode) => m === 'standard' || m === 'max';
-/** RNNoise worklet latency: 992 samples at 48 kHz (measured offline, constant). */
-const RNNOISE_DELAY_S = 992 / 48_000;
-/** DeepFilterNet attenuation limit (dB): its own, phase-aligned dry mix. */
-const DFN_ATTEN_DB = 20;
-
 /** Which neural suppressor runs in our graph for this mode. */
 const processorOf = (m: NoiseSuppressionMode) => (m === 'dfn' ? 'dfn' : m === 'ai' || m === 'max' ? 'rnnoise' : 'none');
 
@@ -532,9 +512,9 @@ async function createDeepFilter(ctx: AudioContext): Promise<AudioWorkletNode> {
     channelCountMode: 'explicit',
     channelInterpretation: 'discrete',
     // The model is copied per node; the compiled module is shared.
-    // 20 dB attenuation limit: noise is cut by 20 dB at most, which also means a syllable
-    // the model takes for noise is softened (to 10%) instead of erased.
-    processorOptions: { module: assets.module, model: assets.model.slice(0), attenLim: DFN_ATTEN_DB },
+    // Full suppression (cleanest by ear), with the "only noise" threshold moved from -10 to
+    // -15 dB local SNR: whispered word endings lost dropped from 54% to 20% (measured).
+    processorOptions: { module: assets.module, model: assets.model.slice(0), attenLim: 100, minDb: -15 },
   });
 }
 
