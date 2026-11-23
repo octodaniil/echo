@@ -55,6 +55,8 @@ export class MicPipeline {
   private dfn: AudioWorkletNode | null = null;
   /** DeepFilterNet failed this session: «ИИ-шумодав 2.0» falls back to RNNoise. */
   private dfnBroken = false;
+  /** Last heartbeat from the DeepFilterNet worklet (performance.now()). */
+  private dfnBeat = 0;
   private applied: Settings | null = null;
   private timer: number | undefined;
 
@@ -271,12 +273,18 @@ export class MicPipeline {
       try {
         const node = await createDeepFilter(this.ctx);
         node.port.onmessage = (e: MessageEvent<{ type: string; reason?: string }>) => {
-          if (e.data?.type !== 'error' || this.dfn !== node) return;
+          if (this.dfn !== node) return;
+          if (e.data?.type === 'beat') {
+            this.dfnBeat = performance.now();
+            return;
+          }
+          if (e.data?.type !== 'error') return;
           this.dfnBroken = true;
           this.note(`ИИ-шумодав 2.0 сломался (${e.data.reason}) — включён обычный ИИ-шумодав`);
           void this.rewire(this.applied ?? s);
         };
         this.dfn = node;
+        this.dfnBeat = performance.now();
         this.source.connect(node).connect(this.inputGain);
         return;
       } catch (err) {
@@ -327,10 +335,15 @@ export class MicPipeline {
     // Watchdog #2, after the noise suppressor: broken samples, or dead-flat zeros while the
     // raw mic clearly hears something (≈ -46 dB peak) for 3 s = the processing hung.
     const hearsSound = peak > 0.005 && s.inputVolume > 0;
-    if (broken || (hearsSound && procPeak === 0)) {
+    // DeepFilterNet legitimately outputs exact zeros when there is only noise: for it a hang
+    // means its heartbeat stopped, not a silent output.
+    const hung = this.dfn
+      ? this.ctx.state === 'running' && performance.now() - this.dfnBeat > 3000
+      : hearsSound && procPeak === 0;
+    if (broken || hung) {
       this.stalledSince ||= performance.now();
       if (broken || performance.now() - this.stalledSince > 3000) {
-        void this.rebuildProcessing(broken ? 'битый звук (NaN)' : 'завис и молчал');
+        void this.rebuildProcessing(broken ? 'битый звук (NaN)' : 'завис');
       }
     } else {
       this.stalledSince = 0;

@@ -446,6 +446,13 @@ class EchoDeepFilter extends AudioWorkletProcessor {
       if (input) output.set(input);
       return true;
     }
+    // Heartbeat about twice a second: DeepFilterNet outputs exact silence between words, so
+    // "the output is flat zero" can't tell a hang apart; a missing heartbeat can.
+    this.beat = (this.beat || 0) + 1;
+    if (this.beat >= 187) {
+      this.beat = 0;
+      this.port.postMessage({ type: 'beat' });
+    }
     const src = input || (this.silence ||= new Float32Array(QUANTUM));
     for (let i = 0; i < src.length; i++) {
       this.inBuf[this.inLen++] = src[i];
