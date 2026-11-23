@@ -598,6 +598,16 @@ export function Main({
               setStatusMenu(false);
               setShowFun(true);
             }}
+            onNotHeard={
+              v.status === 'connected'
+                ? () => {
+                    setStatusMenu(false);
+                    void voice.reportNotHeard().then(() =>
+                      showToast('Отчёт отправлен админу. Echo заодно перезапустил отправку голоса — попробуй сказать ещё раз', 7000),
+                    );
+                  }
+                : undefined
+            }
             onClose={() => setStatusMenu(false)}
             onError={(m) => showToast(m)}
           />

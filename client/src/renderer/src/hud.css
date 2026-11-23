@@ -1594,3 +1594,34 @@ input[type='range']::-webkit-slider-thumb {
 .radio-cards.three .radio-card {
   grid-template-columns: auto 1fr;
 }
+
+/* admin diagnostics */
+.diag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+.diag-row {
+  display: grid;
+  grid-template-columns: 150px 140px 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 10px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.diag-row.manual {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger, #ff5c7a) 60%, transparent);
+}
+.diag-row:hover {
+  background: rgba(80, 220, 255, 0.05);
+}
+.diag-data {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  font-size: 11px;
+  white-space: pre-wrap;
+  user-select: text;
+  color: var(--muted);
+}

@@ -14,6 +14,7 @@ import {
   type TrackPublication,
 } from 'livekit-client';
 import { MicPipeline } from './mic';
+import { report } from './diag';
 import { play, playUserJoin } from './sounds';
 import { settings, VOICE_BITRATE, type Settings } from './settings';
 import { streamLabel, streamParams } from './streamQuality';
@@ -117,6 +118,14 @@ class VoiceClient {
   /** Things besides a call that need the mic open (e.g. the settings screen). */
   private previewUsers = 0;
   private speakingTimer: number | undefined;
+  /** Once a second: is our voice really leaving, and are friends really arriving? */
+  private healthTimer: number | undefined;
+  /** Last seconds: was the gate open, and how many bytes the mic sender had sent. */
+  private sendWindow: { open: boolean; bytes: number }[] = [];
+  private lastSendFix = 0;
+  /** Per friend: since when the server says they talk while we hear nothing. */
+  private silentWhileSpeaking = new Map<string, number>();
+  private lastResubscribe = new Map<string, number>();
   private remoteSpeakingUntil = new Map<string, number>();
   /** Analysers on friends' voices; one shared AudioContext only while in a call. */
   private meterCtx: AudioContext | null = null;
@@ -372,8 +381,156 @@ class VoiceClient {
         loud ||= db > REMOTE_SPEAKING_DB;
       }
       if (loud) this.remoteSpeakingUntil.set(p.identity, now + SPEAKING_HOLD_MS);
+      // Receive watchdog: the server hears them talk (it measures their packets) but their
+      // audio reaching us is silent for 3 s -> our subscription is stuck; resubscribe.
+      if (m && p.isSpeaking && pub.isSubscribed) {
+        m.analyser.getFloatTimeDomainData(this.meterBuf);
+        let sum = 0;
+        for (const v of this.meterBuf) sum += v * v;
+        const db = 10 * Math.log10(sum / this.meterBuf.length + 1e-12);
+        if (db < -80) {
+          const since = this.silentWhileSpeaking.get(p.identity) ?? now;
+          this.silentWhileSpeaking.set(p.identity, since);
+          if (now - since > 3000 && now - (this.lastResubscribe.get(p.identity) ?? 0) > 20_000) {
+            this.lastResubscribe.set(p.identity, now);
+            this.silentWhileSpeaking.delete(p.identity);
+            void this.resubscribe(pub, p.name || p.identity);
+          }
+        } else this.silentWhileSpeaking.delete(p.identity);
+      } else this.silentWhileSpeaking.delete(p.identity);
     }
     this.syncParticipants();
+  }
+
+  private async resubscribe(pub: RemoteTrackPublication, who: string) {
+    report('receive-fix', { who, canPlayback: this.room?.canPlaybackAudio ?? null });
+    pub.setSubscribed(false);
+    await new Promise((r) => setTimeout(r, 400));
+    pub.setSubscribed(true);
+    if (this.room && !this.room.canPlaybackAudio) await this.room.startAudio().catch(() => {});
+  }
+
+  /**
+   * Send watchdog (once a second while in a call): if the voice gate was open most of the
+   * last 3 s but the mic sender barely sent anything, our voice isn't leaving the PC (the
+   * "mic stopped after a silence" case). First re-attach the track to the sender; if it
+   * happens again soon, publish the mic anew. Every case is reported for diagnostics.
+   */
+  private async checkHealth() {
+    const room = this.room;
+    const p = this.pipeline;
+    const track = this.micTrack;
+    if (!room || !p || !track || this.state.status !== 'connected') return;
+    if (!room.canPlaybackAudio) await room.startAudio().catch(() => {});
+    const published = [...room.localParticipant.audioTrackPublications.values()].some((x) => x.track === track);
+    // Muted by us, or by a moderator (the server took the mic away): nothing to repair.
+    if (
+      this.state.micMuted ||
+      this.state.deafened ||
+      this.micTesting ||
+      !published ||
+      room.localParticipant.permissions?.canPublish === false
+    ) {
+      this.sendWindow = [];
+      return;
+    }
+    // LiveKit pauses sending when the browser reports the track as muted, and resumes only
+    // on an "unmute" event that may never come.
+    if (track.isUpstreamPaused || track.isMuted) {
+      report('send-fix', { step: 'unpause', paused: track.isUpstreamPaused, muted: track.isMuted, ...this.micSnapshot() });
+      await track.resumeUpstream().catch(() => {});
+      if (track.isMuted) await track.unmute().catch(() => {});
+    }
+    const sender = track.sender;
+    let bytes = 0;
+    if (sender) {
+      const stats = await sender.getStats().catch(() => null);
+      stats?.forEach((s: { type: string; bytesSent?: number }) => {
+        if (s.type === 'outbound-rtp') bytes += s.bytesSent ?? 0;
+      });
+    }
+    if (this.micTrack !== track) return;
+    this.sendWindow.push({ open: p.gateOpen, bytes });
+    if (this.sendWindow.length > 4) this.sendWindow.shift();
+    if (this.sendWindow.length < 4) return;
+    const openTicks = this.sendWindow.slice(1).filter((x) => x.open).length;
+    const sent = this.sendWindow[3]!.bytes - this.sendWindow[0]!.bytes;
+    // A new sender (after a republish) starts counting from zero: start the window over.
+    if (sent < 0) {
+      this.sendWindow = [];
+      return;
+    }
+    // Speech is 3-16 KB/s, silence (DTX) a few hundred bytes. 3 s of talking under 1.5 KB = stuck.
+    if (openTicks < 2 || sent >= 1500) return;
+    const now = Date.now();
+    if (now - this.lastSendFix < 8000) return;
+    const again = now - this.lastSendFix < 60_000;
+    this.lastSendFix = now;
+    this.sendWindow = [];
+    const info = { sent, hasSender: !!sender, senderTrack: sender?.track?.readyState ?? null, ...this.micSnapshot() };
+    if (!again && sender) {
+      report('send-fix', { step: 'replaceTrack', ...info });
+      await sender.replaceTrack(p.track).catch(() => {});
+    } else {
+      report('send-fix', { step: 'republish', ...info });
+      await room.localParticipant.unpublishTrack(track, false).catch(() => {});
+      const fresh = new LocalAudioTrack(p.track, undefined, true);
+      this.micTrack = fresh;
+      await room.localParticipant
+        .publishTrack(fresh, {
+          source: Track.Source.Microphone,
+          dtx: true,
+          red: true,
+          audioPreset: { maxBitrate: VOICE_BITRATE[settings.get().voiceQuality] ?? 64_000 },
+        })
+        .catch((err) => report('send-fix-failed', { error: String(err) }));
+    }
+    this.set({ error: 'Микрофон: голос перестал уходить к друзьям. Echo сам всё починил, говори дальше' });
+  }
+
+  /**
+   * «Меня не слышно»: a full report for the admin, and the strongest repair we have without
+   * leaving the channel (the mic sender is re-attached and the mic processing restarted).
+   */
+  async reportNotHeard() {
+    const t = this.micTrack;
+    let outbound: Record<string, unknown> | null = null;
+    const stats = await t?.sender?.getStats().catch(() => null);
+    stats?.forEach((s: Record<string, unknown>) => {
+      if (s.type === 'outbound-rtp') outbound = { bytesSent: s.bytesSent, packetsSent: s.packetsSent, targetBitrate: s.targetBitrate };
+    });
+    const remotes = this.room
+      ? [...this.room.remoteParticipants.values()].map((p) => ({ who: p.name || p.identity, speaking: p.isSpeaking }))
+      : [];
+    report('manual', { ...this.micSnapshot(), outbound, remotes, sendWindow: this.sendWindow });
+    if (t?.sender && this.pipeline) await t.sender.replaceTrack(this.pipeline.track).catch(() => {});
+    if (t?.isUpstreamPaused) await t.resumeUpstream().catch(() => {});
+    await this.pipeline?.restartProcessing('по кнопке «Меня не слышно»');
+  }
+
+  /** The mic's state for diagnostics reports. */
+  micSnapshot() {
+    const p = this.pipeline;
+    const t = this.micTrack;
+    const s = settings.get();
+    return {
+      ns: s.noiseSuppression,
+      sensitivity: s.sensitivityAuto ? 'auto' : s.sensitivityDb,
+      inputVolume: s.inputVolume,
+      level: p ? Math.round(p.level) : null,
+      floor: p ? Math.round(p.noiseFloor) : null,
+      threshold: p ? Math.round(p.threshold) : null,
+      gateOpen: p?.gateOpen ?? null,
+      ctx: p?.ctx.state ?? null,
+      inCall: this.state.status,
+      published: t?.mediaStreamTrack.readyState ?? null,
+      trackMuted: t?.mediaStreamTrack.muted ?? null,
+      upstreamPaused: t?.isUpstreamPaused ?? null,
+      lkMuted: t?.isMuted ?? null,
+      userMuted: this.state.micMuted,
+      deafened: this.state.deafened,
+      micLog: p?.log.slice(-5) ?? [],
+    };
   }
 
   /** Voice is always received; streams only while someone is watching them. */
@@ -501,6 +658,8 @@ class VoiceClient {
       this.set({ status: 'connected' });
       if (!force) void play('join');
       this.speakingTimer = window.setInterval(() => this.pollRemoteSpeaking(), 60);
+      this.sendWindow = [];
+      this.healthTimer = window.setInterval(() => void this.checkHealth(), 1000);
       this.syncParticipants();
     } catch (err) {
       if (this.room !== room) return;
@@ -540,6 +699,7 @@ class VoiceClient {
 
   private async teardown(error: string | null, switching = false) {
     clearInterval(this.speakingTimer);
+    clearInterval(this.healthTimer);
     this.room = null;
     this.micTrack = null;
     this.stopScreenCapture();

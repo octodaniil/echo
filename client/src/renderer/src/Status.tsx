@@ -70,6 +70,7 @@ export function StatusMenu({
   onAchievements,
   onRecap,
   onFun,
+  onNotHeard,
   onClose,
   onError,
 }: {
@@ -78,6 +79,8 @@ export function StatusMenu({
   onAchievements: () => void;
   onRecap: () => void;
   onFun: () => void;
+  /** Only while in a call. */
+  onNotHeard?: () => void;
   onClose: () => void;
   onError: (msg: string) => void;
 }) {
@@ -113,6 +116,11 @@ export function StatusMenu({
       <button class="status-menu-item" onClick={onAchievements}>
         Мои ачивки
       </button>
+      {onNotHeard && (
+        <button class="status-menu-item" onClick={onNotHeard}>
+          Меня не слышно — отправить отчёт
+        </button>
+      )}
       <button class="status-menu-item" onClick={onFun}>
         Споры, прогнозы, капсулы
       </button>

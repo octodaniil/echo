@@ -4,7 +4,8 @@
   official source: https://github.com/Rikorose/DeepFilterNet (libDF, commit 7b14b89),
   `cargo build -p deep_filter --release --target wasm32-unknown-unknown --no-default-features --features wasm`
   with `RUSTFLAGS="-C target-feature=+simd128"` and the `default-model` feature removed from `wasm`
-  (the model is passed in at runtime), then
+  (the model is passed in at runtime), plus Echo's `df_set_thresholds` export appended to
+  `libDF/src/wasm.rs` (sets `min_db_thresh` / `max_db_erb_thresh` / `max_db_df_thresh`), then
   `wasm-bindgen 0.2.92 --target web --remove-name-section --remove-producers-section`.
 - `DeepFilterNet3_onnx.tar.gz` is the official model from the same repository (`models/`).
 - License: MIT or Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE).

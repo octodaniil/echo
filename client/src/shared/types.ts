@@ -265,6 +265,16 @@ export interface WeeklyState {
   quests: { id: number; with: string; title: string; target: number; value: number; unit: string; done: boolean; startedBy: string }[];
 }
 
+export interface DiagReport {
+  id: number;
+  userId: string;
+  nickname: string;
+  at: number;
+  kind: string;
+  version: string;
+  data: Record<string, unknown>;
+}
+
 export interface FunState {
   wallet: { sparks: number; betsWon: number; predicted: number };
   bets: {

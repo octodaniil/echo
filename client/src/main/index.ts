@@ -302,6 +302,10 @@ function registerIpc() {
   handle('recap:get', async (which: string) =>
     (await authed<{ recap: unknown }>(requireSession(), `/api/recap?week=${which === 'current' ? 'current' : 'last'}`)).recap,
   );
+  handle('diag:send', (kind: string, data: unknown) =>
+    authed(requireSession(), '/api/me/diag', { method: 'POST', body: { kind, version: app.getVersion(), data } }),
+  );
+  handle('diag:list', async () => (await authed<{ reports: unknown }>(requireSession(), '/api/diag')).reports);
   handle('voice:activity', () => authed(requireSession(), '/api/me/voice-activity', { method: 'POST', body: {} }));
   // ---------- chat ----------
   const conv = (c: string) => encodeURIComponent(c);

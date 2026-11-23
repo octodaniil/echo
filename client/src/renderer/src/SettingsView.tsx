@@ -1,6 +1,6 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Member, Session, UpdateStatus } from '../../shared/types';
+import type { Member, Session, UpdateStatus, DiagReport } from '../../shared/types';
 import { Avatar } from './Avatar';
 import { CloseIcon } from './icons';
 import type { MicPipeline } from './mic';
@@ -20,7 +20,7 @@ import {
 } from './hotkeys';
 import { voice } from './voice';
 
-export type Tab = 'voice' | 'hotkeys' | 'games' | 'account' | 'style' | 'pioneers' | 'app';
+export type Tab = 'voice' | 'hotkeys' | 'games' | 'account' | 'style' | 'pioneers' | 'diag' | 'app';
 
 export function SettingsView({
   session,
@@ -78,6 +78,10 @@ export function SettingsView({
               <i class="nav-num">A1</i>
               Первооткрыватели
             </NavItem>
+            <NavItem active={tab === 'diag'} onClick={() => setTab('diag')}>
+              <i class="nav-num">A2</i>
+              Диагностика
+            </NavItem>
           </>
         )}
       </nav>
@@ -86,6 +90,7 @@ export function SettingsView({
         {tab === 'account' && <AccountTab session={session} onSession={onSession} />}
         {tab === 'style' && <StyleTab session={session} />}
         {tab === 'pioneers' && staff && <PioneersTab session={session} />}
+        {tab === 'diag' && staff && <DiagTab />}
         {tab === 'hotkeys' && <HotkeysTab />}
         {tab === 'games' && <GamesTab />}
         {tab === 'app' && <AppTab session={session} />}
@@ -129,7 +134,7 @@ const NS_OPTIONS: { value: NoiseSuppressionMode; title: string; hint: string }[]
   {
     value: 'dfn',
     title: 'ИИ-шумодав 2.0',
-    hint: 'Нейросеть DeepFilterNet 3 — как в Discord: убирает клавиатуру, вентиляторы, эхо комнаты и оставляет голос чистым и полным.',
+    hint: 'Эксперимент. Нейросеть DeepFilterNet 3 сильнее давит шум и эхо комнаты, но может съедать очень тихую речь и шёпот.',
   },
   { value: 'max', title: 'Максимальный', hint: 'ИИ-шумодав + шумодав WebRTC вместе. Если друзья слышат фон, клавиатуру или вентилятор — включи этот.' },
   { value: 'ai', title: 'ИИ-шумодав', hint: 'Нейросеть RNNoise убирает клавиатуру, вентиляторы и фон. Чуть больше нагрузка на CPU.' },
@@ -915,6 +920,48 @@ function ChatStorageAdmin() {
         <p class="muted">Загружаем…</p>
       )}
     </>
+  );
+}
+
+const DIAG_KIND: Record<string, string> = {
+  manual: 'Меня не слышно (отчёт)',
+  mic: 'Микрофон перезапущен',
+  'send-fix': 'Голос не уходил: починено',
+  'send-fix-failed': 'Голос не уходил: починить не вышло',
+  'receive-fix': 'Не было слышно друга: переподключено',
+};
+
+/** Staff: what Echo had to fix by itself on friends' PCs, newest first. */
+function DiagTab() {
+  const [list, setList] = useState<DiagReport[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
+  const load = () => void window.echo.listDiag().then(setList).catch((e: Error) => setError(e.message));
+  useEffect(load, []);
+  return (
+    <div class="settings-page">
+      <h2>Диагностика</h2>
+      <p class="muted">
+        Здесь видно, что Echo сам чинил у друзей: перезапуск микрофона, голос перестал уходить, кого-то не было слышно. А ещё
+        отчёты «Меня не слышно» — их отправляют из меню профиля. Нажми на строку, чтобы увидеть подробности.
+      </p>
+      <button class="secondary small" onClick={load}>
+        Обновить
+      </button>
+      {error && <div class="error">{error}</div>}
+      {list && list.length === 0 && <p class="muted">Пока ни одного случая.</p>}
+      <div class="diag-list">
+        {list?.map((r) => (
+          <div key={r.id} class={`diag-row${r.kind === 'manual' ? ' manual' : ''}`} onClick={() => setOpen(open === r.id ? null : r.id)}>
+            <span class="mono tiny muted">{new Date(r.at).toLocaleString('ru-RU')}</span>
+            <b>{r.nickname}</b>
+            <span>{DIAG_KIND[r.kind] ?? r.kind}</span>
+            <span class="mono tiny muted">{r.version}</span>
+            {open === r.id && <pre class="diag-data">{JSON.stringify(r.data, null, 2)}</pre>}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

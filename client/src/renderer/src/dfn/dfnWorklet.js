@@ -145,6 +145,18 @@ export function df_process_frame(st, input) {
     return takeObject(ret);
 }
 
+/**
+* Echo: set the local-SNR thresholds (dB) that decide per frame whether it is
+* only noise (zeroed), noisy speech (both stages) or clean speech (untouched).
+* @param {number} st
+* @param {number} min_db
+* @param {number} max_db_erb
+* @param {number} max_db_df
+*/
+export function df_set_thresholds(st, min_db, max_db_erb, max_db_df) {
+    wasm.df_set_thresholds(st, min_db, max_db_erb, max_db_df);
+}
+
 function handleError(f, args) {
     try {
         return f.apply(this, args);
@@ -404,6 +416,9 @@ class EchoDeepFilter extends AudioWorkletProcessor {
       initSync(o.module);
       this.state = df_create(new Uint8Array(o.model), o.attenLim ?? 100);
       this.hop = df_get_frame_length(this.state);
+      // Only frames that are clearly noise (local SNR < -15 dB, default -10) are zeroed:
+      // quiet and whispered speech is kept instead of being cut between syllables.
+      df_set_thresholds(this.state, o.minDb ?? -15, 30, 20);
       this.ok = true;
     } catch (e) {
       this.fail('init: ' + (e && e.message ? e.message : String(e)));

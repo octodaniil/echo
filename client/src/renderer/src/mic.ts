@@ -6,6 +6,7 @@ import dfnWasmUrl from './dfn/df_bg.wasm?url';
 import dfnModelUrl from './dfn/DeepFilterNet3_onnx.tar.gz?url';
 import dfnWorkletUrl from './dfn/dfnWorklet.js?url';
 import type { NoiseSuppressionMode, Settings } from './settings';
+import { report } from './diag';
 
 /**
  * Microphone processing chain, all inside one 48 kHz AudioContext:
@@ -113,6 +114,7 @@ export class MicPipeline {
     this.log.push(line);
     if (this.log.length > 20) this.log.shift();
     console.warn('[mic]', line);
+    report('mic', { reason, ns: this.applied?.noiseSuppression });
     for (const fn of this.recoverListeners) fn(reason);
   }
 
@@ -139,6 +141,12 @@ export class MicPipeline {
     } finally {
       this.recovering = false;
     }
+  }
+
+  /** Manual repair: rebuild the processing chain now (no 5 s guard). */
+  async restartProcessing(reason: string) {
+    this.lastRebuild = 0;
+    await this.rebuildProcessing(reason);
   }
 
   onGateChange(fn: (open: boolean) => void) {
@@ -364,10 +372,14 @@ export class MicPipeline {
     // Never learn from moments when the gate is open (that's speech, not noise).
     if (!this.gateOpen || min < this.noiseFloor) this.noiseFloor += (min - this.noiseFloor) * 0.05;
     this.noiseFloor = Math.min(-40, Math.max(-90, this.noiseFloor));
-    // Auto: well above the room noise, but within -52..-42 dB: quiet rooms with AGC sit
-    // around -55..-65 dB, and even quiet speech is louder than -42 dB.
+    // Auto: well above the room noise, capped at -42 dB. The lower bound depends on whether
+    // a neural suppressor runs: without one, quiet rooms with AGC sit around -55..-65 dB and
+    // must not open the gate; with one, the room noise is already gone (floor -80 and below),
+    // and the old -52 dB bound cut quiet speakers and whisperers mid-word.
+    const kind = processorOf(s.noiseSuppression);
+    const lowest = kind === 'none' ? -52 : kind === 'dfn' ? -66 : -62;
     this.threshold = s.sensitivityAuto
-      ? Math.min(-42, Math.max(-52, this.noiseFloor + 15))
+      ? Math.min(-42, Math.max(lowest, this.noiseFloor + 12))
       : s.sensitivityDb;
 
     const now = performance.now();
