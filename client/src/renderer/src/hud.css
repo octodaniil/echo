@@ -1635,9 +1635,10 @@ input[type='range']::-webkit-slider-thumb {
   transform: translateX(-50%);
   width: min(720px, calc(100% - 24px));
   padding: 6px 8px 6px 12px;
-  background: rgba(6, 10, 18, 0.88);
-  box-shadow: inset 0 0 0 1px var(--line), 0 6px 24px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
+  /* Opaque, no backdrop-filter: blurring the live video under the bar re-renders it every
+     frame and dropped the FPS of fullscreen streams (see the performance rules in styles.css). */
+  background: rgba(6, 10, 18, 0.94);
+  box-shadow: inset 0 0 0 1px var(--line);
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
 }
 .stream-volume {

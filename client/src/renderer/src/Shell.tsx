@@ -130,6 +130,13 @@ export function Main({
   onSession: (s: Session) => void;
 }) {
   const v = useVoice();
+  // While a stream is watched (in the window, fullscreen or a pop-out), decorative animations
+  // pause: each one repaints every display frame, and together (crowns, plate sheens, nick
+  // effects) they kept Chromium's GPU process so busy that the hardware video decoder stalled
+  // in fullscreen (8 of 33 fps; 33 of 33 with them paused, measured).
+  useEffect(() => {
+    document.documentElement.classList.toggle('calm', !!v.watching);
+  }, [v.watching]);
   const [toast, showToast] = useToast();
   const [showSettings, setShowSettings] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);

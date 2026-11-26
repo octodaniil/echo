@@ -832,7 +832,11 @@
   flex-shrink: 0;
   display: inline-grid;
   place-items: center;
-  animation: crown-bob 2.6s ease-in-out infinite;
+}
+/* Small crowns (lists, cards) are static: animating many of them repainted every frame. */
+.crown-tag .crown-shine,
+.crown-tag .crown-jewel {
+  animation: none;
 }
 .crown-tag.crown-talk {
   filter: drop-shadow(0 0 4px rgba(255, 207, 74, 0.7));
@@ -1457,4 +1461,11 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .big-crown, .big-crown-shine, .big-crown-jewel, .big-crown-glow { animation: none; }
+}
+
+/* Watching a stream: every decorative animation pauses (see Shell.tsx, class "calm"). */
+.calm *,
+.calm *::before,
+.calm *::after {
+  animation-play-state: paused !important;
 }
